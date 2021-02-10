@@ -18,13 +18,13 @@ def process_reward(obs, reward, done):
 
     if done:
         if reward > 0:
-            return 10
+            return process_reward.prev_alive * 10
         else:
             return -10
 
     # if kill, get 10
     curr_alive = 0
-    for goose in obs['geese']:
+    for goose in obs['geese'][1:]:
         if len(goose) > 0:
             curr_alive += 1
     killed = process_reward.prev_alive - curr_alive
@@ -47,12 +47,14 @@ def finish_episode():
             sum_reward -= gamma_td * policy.rewards[tail]
         sum_reward = args.gamma * sum_reward + policy.rewards[i]
         td_targets[i] = sum_reward + \
-            (gamma_td * args.gamma * value.values[tail] if tail < epi_len else torch.tensor([[0.]], device=device))
+            (gamma_td * args.gamma * value.values[tail]
+             if tail < epi_len else torch.tensor([[0.]], device=device))
 
     log_probs = torch.cat(policy.saved_log_probs)
     td_targets = torch.cat(td_targets).squeeze()
     values = torch.cat(value.values).squeeze()
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
+    policy_loss += -sum(policy.saved_entropies).squeeze()  # spread probs
     value_loss = F.smooth_l1_loss(td_targets.detach(), values, reduction='sum')
 
     optimizer.zero_grad()
@@ -96,18 +98,20 @@ if __name__ == '__main__':
                         help='random seed (default: 543)')
     parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                         help='interval between status logs (default: 200)')
-    parser.add_argument('--step-log-interval', type=int, default=1000, metavar='N',
+    parser.add_argument('--step-log-interval', type=int, default=1000,
+                        metavar='N',
                         help='interval between step logs (default: 1000)')
-    parser.add_argument('--change-interval', type=int, default=2000, metavar='N',
-                        help='interval between changing opponent policies (default: 2000)')
-    parser.add_argument('--lr', type=float, default=3e-5, metavar='G',
-                        help='learning rate (default: 3e-5)')
-    parser.add_argument('--value-lr', type=float, default=3e-5, metavar='G',
-                        help='learning rate for value (default: 3e-5)')
+    parser.add_argument('--change-interval', type=int, default=2000,
+                        metavar='N',
+                        help='interval btw changing opponent (default: 2000)')
+    parser.add_argument('--plr', type=float, default=5e-5, metavar='G',
+                        help='learning rate (default: 5e-5)')
+    parser.add_argument('--vlr', type=float, default=5e-5, metavar='G',
+                        help='learning rate for value (default: 5e-5)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
-    parser.add_argument('--prev-pi', type=int, default=10, metavar='N',
-                        help='number of previous policies to save (default: 20)')
+    parser.add_argument('--prev-pi', type=int, default=15, metavar='N',
+                        help='# of previous policies to save (default: 15)')
     args = parser.parse_args()
 
     env = make('hungry_geese', debug=False)
@@ -123,9 +127,10 @@ if __name__ == '__main__':
     eps = np.finfo(np.float32).eps.item()
 
     # training the agent in the first position
-    trainer = env.train([None, 'examples/risk_averse.py', 'examples/risk_averse.py', 'random'])
+    trainer = env.train([None, 'examples/risk_averse.py',
+                         'examples/risk_averse.py', 'random'])
     policy.train()
-    oppo_policy = [Policy().to(device) for _ in range(3)]
+    oppo_policy = [Policy().to(device).eval() for _ in range(3)]
     value = Value().to(device)
     optimizer = optim.Adam(policy.parameters(), lr=args.lr)
     value_optim = optim.Adam(value.parameters(), lr=args.value_lr)
@@ -144,10 +149,10 @@ if __name__ == '__main__':
     for i_episode in range(1, 100001):
         observation, ep_reward = trainer.reset(), 0
         process_reward.prev_len = 1
-        process_reward.prev_alive = 4
+        process_reward.prev_alive = 3
 
         for step in range(1, 101):
-            action = agent(observation, configuration, save=True)
+            action = agent(observation, configuration, train=True)
             v = value(preprocess(observation).to(device))
             observation, reward, done, info = trainer.step(action)
             reward = process_reward(observation, reward, done)
@@ -183,7 +188,8 @@ if __name__ == '__main__':
             elif len(prev_policies) == args.prev_pi:
                 random_index = random.randint(0, len(prev_policies) - 1)
                 trainer = env.train([None, opponent, opponent, opponent])
-                oppo_policy[oppo_index].load_state_dict(prev_policies[random_index])
+                oppo_policy[oppo_index].load_state_dict(
+                    prev_policies[random_index])
                 oppo_index = (oppo_index + 1) % 3
 
     tb.close()

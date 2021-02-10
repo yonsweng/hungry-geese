@@ -32,15 +32,14 @@ class Policy(nn.Module):
 # global constants & variables
 ACTION_NAMES = ['NORTH', 'EAST', 'WEST', 'SOUTH']
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-policy = Policy()
-eps = 0.05
+policy = Policy().to(device).eval()
 last_a = -1
+eps = 0.1
 
-# load policy
-# policy.load_state_dict(torch.load('/kaggle_simulations/agent/policy.pt', map_location=device))
-
-policy.to(device)
-policy.eval()
+if __name__ != 'main':
+    # load policy
+    policy.load_state_dict(torch.load('/kaggle_simulations/agent/policy.pt',
+                                      map_location=device))
 
 
 def preprocess(observation):
@@ -56,7 +55,7 @@ def preprocess(observation):
     return x
 
 
-def agent(observation, configuration, save=False):
+def agent(observation, configuration, train=False):
     global ACTION_NAMES, device, policy, last_a, eps
     observation = preprocess(observation).to(device)
     logits = policy(observation)
@@ -68,16 +67,19 @@ def agent(observation, configuration, save=False):
         probs = torch.zeros_like(logits, device=device)
         probs[:, mask] = F.softmax(logits[:, mask], 1)
         m = Categorical(probs)
-        action = m.sample() if random.random() >= eps \
-            else mask[random.randint(0, 2)].unsqueeze(0)
+        if train:
+            eps *= 0.99995  # reduce random probability
+            action = m.sample() if random.random() >= eps \
+                else mask[random.randint(0, 2)].unsqueeze(0)
+        else:
+            action = m.sample()
     else:
         probs = F.softmax(logits, 1)
         m = Categorical(probs)
         action = m.sample()
-    if save:
+    if train:
         policy.saved_log_probs.append(m.log_prob(action))
         policy.saved_entropies.append(m.entropy())
     last_a = action.item()
     action = ACTION_NAMES[last_a]
-    eps *= 0.9999  # reduce random probability
     return action
