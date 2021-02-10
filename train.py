@@ -30,7 +30,7 @@ def process_reward(obs, reward, done):
         curr_len = reward - 99
         len_diff = curr_len - process_reward.prev_len
         process_reward.prev_len = curr_len
-        return killed * 10 + len_diff * 3 + 1
+        return killed * 10 + len_diff * 2 + 1
 
 
 def finish_episode():
@@ -50,7 +50,7 @@ def finish_episode():
     td_targets = torch.cat(td_targets).squeeze()
     values = torch.cat(value.values).squeeze()
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
-    value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
+    value_loss = F.smooth_l1_loss(td_targets.detach(), values, reduction='sum')
 
     optimizer.zero_grad()
     value_optim.zero_grad()
@@ -103,8 +103,8 @@ if __name__ == '__main__':
                         help='learning rate for value (default: 1e-4)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
-    parser.add_argument('--prev-pi', type=int, default=10, metavar='N',
-                        help='number of previous policies to save (default: 10)')
+    parser.add_argument('--prev-pi', type=int, default=20, metavar='N',
+                        help='number of previous policies to save (default: 20)')
     args = parser.parse_args()
 
     env = make('hungry_geese', debug=False)
@@ -179,7 +179,11 @@ if __name__ == '__main__':
 
         if i_episode % args.change_interval == 0:
             prev_policies.append(policy.state_dict())
-            if len(prev_policies) == args.prev_pi:
+            if len(prev_policies) == args.prev_pi - 1:
+                for i in range(1, 3):
+                    random_index = random.randint(0, len(prev_policies) - 1)
+                    oppo_policy[i].load_state_dict(prev_policies[random_index])
+            elif len(prev_policies) == args.prev_pi:
                 random_index = random.randint(0, len(prev_policies) - 1)
                 trainer = env.train([None, opponent, opponent, opponent])
                 oppo_policy[oppo_index].load_state_dict(prev_policies[random_index])

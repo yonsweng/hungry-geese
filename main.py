@@ -1,3 +1,4 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -32,6 +33,7 @@ class Policy(nn.Module):
 ACTION_NAMES = ['NORTH', 'EAST', 'WEST', 'SOUTH']
 device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 policy = Policy()
+eps = 0.05
 last_a = -1
 
 # load policy
@@ -59,23 +61,27 @@ def opposite(a):
 
 
 def agent(observation, configuration, save=False):
-    global ACTION_NAMES, device, policy, last_a
+    global ACTION_NAMES, device, policy, last_a, eps
     observation = preprocess(observation).to(device)
     logits = policy(observation)
     if last_a != -1:
         # remove illigal move
         illigal_move = opposite(last_a)
-        mask = torch.arange(4)
-        mask = mask[mask != illigal_move].to(device)
+        mask = [a for a in range(4) if a != illigal_move]
+        mask = torch.tensor(mask, device=device)
         probs = torch.zeros_like(logits, device=device)
         probs[:, mask] = F.softmax(logits[:, mask], 1)
+        m = Categorical(probs)
+        action = m.sample() if random.random() >= eps \
+            else mask[random.randint(0, 2)].unsqueeze(0)
     else:
         probs = F.softmax(logits, 1)
-    m = Categorical(probs)
-    action = m.sample()
+        m = Categorical(probs)
+        action = m.sample()
     if save:
         policy.saved_log_probs.append(m.log_prob(action))
         policy.saved_entropies.append(m.entropy())
     last_a = action.item()
     action = ACTION_NAMES[last_a]
+    eps *= 0.9999  # reduce random probability
     return action
