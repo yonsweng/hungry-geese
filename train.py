@@ -8,7 +8,7 @@ from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from collections import deque
 from kaggle_environments import make
-from main import ACTION_NAMES, device, policy, preprocess, agent, Policy
+from main import Policy, ACTION_NAMES, device, policy, preprocess, agent
 from value_model import Value
 
 
@@ -154,9 +154,7 @@ if __name__ == '__main__':
             policy.rewards.append(reward)
             value.values.append(v)
             ep_reward += reward
-
             actions.append(action2int[action])
-
             if done:
                 break
 
@@ -173,7 +171,7 @@ if __name__ == '__main__':
             tb.add_scalar('reward', running_reward, i_episode)
             tb.add_scalar('steps', running_steps, i_episode)
             tb.add_histogram('actions', np.array(actions), i_episode)
-            tb.add_histogram('entropy', np.array(entropies), i_episode)
+            tb.add_histogram('entropies', np.array(entropies), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')
 
         if i_episode % args.change_interval == 0:
