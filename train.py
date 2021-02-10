@@ -8,29 +8,32 @@ from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from collections import deque
 from kaggle_environments import make
-from main import ACTION_NAMES, device, policy, preprocess, opposite, agent, Policy
+from main import ACTION_NAMES, device, policy, preprocess, agent, Policy
 from value_model import Value
 
 
 def process_reward(obs, reward, done):
+    if obs['step'] == 1:
+        reward -= 101
+
     if done:
         if reward > 0:
             return 10
         else:
             return -10
-    else:
-        # if kill, get 10
-        curr_alive = 0
-        for goose in obs['geese']:
-            if len(goose) > 0:
-                curr_alive += 1
-        killed = process_reward.prev_alive - curr_alive
-        process_reward.prev_alive = curr_alive
 
-        curr_len = reward - 99
-        len_diff = curr_len - process_reward.prev_len
-        process_reward.prev_len = curr_len
-        return killed * 10 + len_diff * 2 + 1
+    # if kill, get 10
+    curr_alive = 0
+    for goose in obs['geese']:
+        if len(goose) > 0:
+            curr_alive += 1
+    killed = process_reward.prev_alive - curr_alive
+    process_reward.prev_alive = curr_alive
+
+    curr_len = reward - 99
+    len_diff = curr_len - process_reward.prev_len
+    process_reward.prev_len = curr_len
+    return killed * 10 + len_diff * 2 + 1
 
 
 def finish_episode():
@@ -71,9 +74,9 @@ def opponent(observation, configuration):
     logits = oppo_policy[index](observation)
     if last_a[index] != -1:
         # remove illigal move
-        illigal_move = opposite(last_a[index])
-        mask = torch.arange(4)
-        mask = mask[mask != illigal_move].to(device)
+        illigal_move = 3 - last_a[index]  # opposite
+        mask = [a for a in range(4) if a != illigal_move]
+        mask = torch.tensor(mask, device=device)
         probs = torch.zeros_like(logits, device=device)
         probs[:, mask] = F.softmax(logits[:, mask], 1)
     else:
@@ -91,19 +94,19 @@ if __name__ == '__main__':
                         help='discount factor (default: 0.99)')
     parser.add_argument('--seed', type=int, default=543, metavar='N',
                         help='random seed (default: 543)')
-    parser.add_argument('--log-interval', type=int, default=100, metavar='N',
-                        help='interval between status logs (default: 100)')
+    parser.add_argument('--log-interval', type=int, default=200, metavar='N',
+                        help='interval between status logs (default: 200)')
     parser.add_argument('--step-log-interval', type=int, default=1000, metavar='N',
                         help='interval between step logs (default: 1000)')
-    parser.add_argument('--change-interval', type=int, default=1000, metavar='N',
-                        help='interval between changing opponent policies (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-4, metavar='G',
-                        help='learning rate (default: 1e-4)')
-    parser.add_argument('--value-lr', type=float, default=1e-4, metavar='G',
-                        help='learning rate for value (default: 1e-4)')
+    parser.add_argument('--change-interval', type=int, default=2000, metavar='N',
+                        help='interval between changing opponent policies (default: 2000)')
+    parser.add_argument('--lr', type=float, default=3e-5, metavar='G',
+                        help='learning rate (default: 3e-5)')
+    parser.add_argument('--value-lr', type=float, default=3e-5, metavar='G',
+                        help='learning rate for value (default: 3e-5)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
-    parser.add_argument('--prev-pi', type=int, default=20, metavar='N',
+    parser.add_argument('--prev-pi', type=int, default=10, metavar='N',
                         help='number of previous policies to save (default: 20)')
     args = parser.parse_args()
 
@@ -129,8 +132,7 @@ if __name__ == '__main__':
     last_a = [-1, -1, -1]
 
     # for log
-    ep_rewards = deque(maxlen=args.log_interval)
-    ep_steps = deque(maxlen=args.log_interval)
+    running_reward, running_steps = 0, 0
     entropies = deque(maxlen=args.step_log_interval)
     actions = deque(maxlen=args.step_log_interval)
     action2int = {'NORTH': 0, 'EAST': 1, 'WEST': 2, 'SOUTH': 3}
@@ -148,7 +150,6 @@ if __name__ == '__main__':
             action = agent(observation, configuration, save=True)
             v = value(preprocess(observation).to(device))
             observation, reward, done, info = trainer.step(action)
-            reward = reward if step != 1 else reward - 100
             reward = process_reward(observation, reward, done)
             policy.rewards.append(reward)
             value.values.append(v)
@@ -159,20 +160,18 @@ if __name__ == '__main__':
             if done:
                 break
 
-        ep_rewards.append(ep_reward)
-        ep_steps.append(step)
-        for entropy in torch.cat(policy.saved_entropies).tolist():
-            entropies.append(entropy)
+        running_reward = running_reward * 0.95 + ep_reward * 0.05
+        running_steps = running_steps * 0.95 + step * 0.05
+        entropies += deque(torch.cat(policy.saved_entropies).tolist())
+
         finish_episode()
 
         if i_episode % args.log_interval == 0:
-            avg_reward = sum(ep_rewards) / len(ep_rewards)
-            avg_step = sum(ep_steps) / len(ep_steps)
             print(f'Episode {i_episode}\t'
-                  f'Average reward: {avg_reward:.2f}\t'
-                  f'Average steps: {avg_step:.2f}\t')
-            tb.add_scalar('reward', avg_reward, i_episode)
-            tb.add_scalar('step', avg_step, i_episode)
+                  f'Average reward: {running_reward:.2f}\t'
+                  f'Average steps: {running_steps:.2f}\t')
+            tb.add_scalar('reward', running_reward, i_episode)
+            tb.add_scalar('steps', running_steps, i_episode)
             tb.add_histogram('actions', np.array(actions), i_episode)
             tb.add_histogram('entropy', np.array(entropies), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')

@@ -31,7 +31,7 @@ class Policy(nn.Module):
 
 # global constants & variables
 ACTION_NAMES = ['NORTH', 'EAST', 'WEST', 'SOUTH']
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 policy = Policy()
 eps = 0.05
 last_a = -1
@@ -56,17 +56,13 @@ def preprocess(observation):
     return x
 
 
-def opposite(a):
-    return 3 - a
-
-
 def agent(observation, configuration, save=False):
     global ACTION_NAMES, device, policy, last_a, eps
     observation = preprocess(observation).to(device)
     logits = policy(observation)
     if last_a != -1:
         # remove illigal move
-        illigal_move = opposite(last_a)
+        illigal_move = 3 - last_a  # opposite
         mask = [a for a in range(4) if a != illigal_move]
         mask = torch.tensor(mask, device=device)
         probs = torch.zeros_like(logits, device=device)
