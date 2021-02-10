@@ -104,7 +104,7 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=2000,
                         metavar='N',
                         help='interval btw changing opponent (default: 2000)')
-    parser.add_argument('--plr', type=float, default=5e-5, metavar='G',
+    parser.add_argument('--lr', type=float, default=5e-5, metavar='G',
                         help='learning rate (default: 5e-5)')
     parser.add_argument('--vlr', type=float, default=5e-5, metavar='G',
                         help='learning rate for value (default: 5e-5)')
@@ -133,7 +133,7 @@ if __name__ == '__main__':
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
     value = Value().to(device)
     optimizer = optim.Adam(policy.parameters(), lr=args.lr)
-    value_optim = optim.Adam(value.parameters(), lr=args.value_lr)
+    value_optim = optim.Adam(value.parameters(), lr=args.vlr)
     last_a = [-1, -1, -1]
 
     # for log
