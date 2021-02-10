@@ -1,4 +1,3 @@
-import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,11 +43,11 @@ if __name__ != 'main':
 
 def preprocess(observation):
     x = torch.zeros(1, 3, 77)
-    for food in observation['food']:
+    for food in observation.food:
         x[0, 0, food] = 1.
-    for i, goose in enumerate(observation['geese']):
+    for i, goose in enumerate(observation.geese):
         if len(goose) > 0:
-            i = 1 if i == observation['index'] else 2
+            i = 1 if i == observation.index else 2
             x[0, i, goose[0]] = 1.
             for part in goose[1:]:
                 x[0, i, part] = .5
@@ -68,9 +67,9 @@ def agent(observation, configuration, train=False):
         probs[:, mask] = F.softmax(logits[:, mask], 1)
         m = Categorical(probs)
         if train:
-            eps *= 0.99995  # reduce random probability
-            action = m.sample() if random.random() >= eps \
-                else mask[random.randint(0, 2)].unsqueeze(0)
+            eps *= 0.99999  # reduce random probability
+            action = m.sample()  # if random.random() >= eps \
+            # else mask[random.randint(0, 2)].unsqueeze(0)
         else:
             action = m.sample()
     else:
