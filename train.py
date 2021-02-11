@@ -9,18 +9,16 @@ from torch.utils.tensorboard import SummaryWriter
 from collections import deque
 from kaggle_environments import make
 from main import Policy, ACTION_NAMES, device, policy, preprocess, agent
-from value_model import Value
+# from value_model import Value
 
 
 def process_reward(obs, reward, done):
     '''
     winning bonus:
-        10  if kill
-        -10 if killed
+        0.5 if kill
+        -1. if killed
     length bonus:
-        3 per length increase
-    step bonus:
-        1 per step
+        .1 per length increase
     '''
     killed, len_diff = 0, 0
 
@@ -28,7 +26,7 @@ def process_reward(obs, reward, done):
         reward -= 101
 
     if reward == 0:  # if lose
-        killed = -1
+        killed = -2
     else:
         # calc killed
         curr_alive = 0
@@ -40,53 +38,56 @@ def process_reward(obs, reward, done):
         process_reward.prev_alive = curr_alive
 
         if curr_alive > 0 and done:  # if step 199
-            killed = -1
+            killed = -2
 
         len_diff = reward - 100
 
-    return killed * 10 + len_diff * 3 + 1
+    return killed * 0.5 + len_diff * 0.1
 
 
 def finish_episode():
-    epi_len = len(policy.rewards)
+    epi_len = len(policy.saved_rewards)
     sum_reward = 0.
     td_targets = [0.] * epi_len
     gamma_td = args.gamma ** args.td
     for i in range(epi_len - 1, -1, -1):
         tail = i + args.td + 1
         if tail < epi_len:
-            sum_reward -= gamma_td * policy.rewards[tail]
-        sum_reward = args.gamma * sum_reward + policy.rewards[i]
+            sum_reward -= gamma_td * policy.saved_rewards[tail]
+        sum_reward = args.gamma * sum_reward + policy.saved_rewards[i]
         td_targets[i] = sum_reward + \
-            (gamma_td * args.gamma * value.values[tail]
+            (gamma_td * args.gamma * policy.saved_values[tail]
              if tail < epi_len else torch.tensor([[0.]], device=device))
 
     log_probs = torch.cat(policy.saved_log_probs)
     td_targets = torch.cat(td_targets).squeeze()
-    values = torch.cat(value.values).squeeze()
+    values = torch.cat(policy.saved_values).squeeze()
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
     policy_loss += -sum(policy.saved_entropies).squeeze() \
         * finish_episode.entropy_coef  # spread probs
     finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
-    value_loss = F.smooth_l1_loss(td_targets.detach(), values, reduction='sum')
+    value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
+    loss = policy_loss + value_loss
 
     optimizer.zero_grad()
-    value_optim.zero_grad()
-    policy_loss.backward()
-    value_loss.backward()
+    # value_optim.zero_grad()
+    loss.backward()
+    # policy_loss.backward()
+    # value_loss.backward()
     optimizer.step()
-    value_optim.step()
+    # value_optim.step()
 
-    del policy.rewards[:]
+    del policy.saved_rewards[:]
     del policy.saved_log_probs[:]
     del policy.saved_entropies[:]
-    del value.values[:]
+    del policy.saved_values[:]
+    # del value.values[:]
 
 
 def opponent(observation, configuration):
     index = observation.index - 1
     observation = preprocess(observation).to(device)
-    logits = oppo_policy[index](observation)
+    logits, _ = oppo_policy[index](observation)
     if last_a[index] != -1:
         # remove illigal move
         illigal_move = 3 - last_a[index]  # opposite
@@ -117,22 +118,22 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=1000,
                         metavar='N',
                         help='interval btw changing opponent (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-4, metavar='G',
-                        help='learning rate (default: 1e-4)')
-    parser.add_argument('--vlr', type=float, default=1e-4, metavar='G',
-                        help='learning rate for value (default: 1e-4)')
+    parser.add_argument('--lr', type=float, default=1e-5, metavar='G',
+                        help='learning rate (default: 1e-5)')
+    parser.add_argument('--l2', type=float, default=0, metavar='G',
+                        help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
     parser.add_argument('--prev-pi', type=int, default=15, metavar='N',
                         help='# of previous policies to save (default: 15)')
+    parser.add_argument('--start-self', type=int, default=1, metavar='N',
+                        help='# of episodes before self-play (default: 2000)')
     # for train resume
-    parser.add_argument('--load', type=str, metavar='S', default='',
-                        help='loading model name')
-    parser.add_argument('--start-self', type=int, default=20000, metavar='N',
-                        help='# of episodes before self-play (default: 20000)')
     parser.add_argument('--spread-until', type=int, default=50000,
                         metavar='N',
-                        help='entropy coef reduce until (default: 50000)')
+                        help='entropy coef reduce until (0: off)')
+    parser.add_argument('--load', type=str, metavar='S', default='',
+                        help='loading model name')
     args = parser.parse_args()
 
     env = make('hungry_geese', debug=False)
@@ -145,8 +146,12 @@ if __name__ == '__main__':
     torch.manual_seed(args.seed)
 
     eps = np.finfo(np.float32).eps.item()
-    finish_episode.entropy_coef = 1.
-    finish_episode.entropy_coef_reduce = 0.01 ** (1 / args.spread_until)
+    if args.spread_until > 0:
+        finish_episode.entropy_coef = 1.
+        finish_episode.entropy_coef_reduce = 0.1 ** (1 / args.spread_until)
+    else:
+        finish_episode.entropy_coef = 0
+        finish_episode.entropy_coef_reduce = 1
 
     # training the agent in the first position
     trainer = env.train([None,
@@ -155,9 +160,10 @@ if __name__ == '__main__':
                          'examples/bolier_goose.py'])
     policy.train()
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
-    value = Value().to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=args.lr)
-    value_optim = optim.Adam(value.parameters(), lr=args.vlr)
+    # value = Value().to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=args.lr,
+                           weight_decay=args.l2)
+    # value_optim = optim.Adam(value.parameters(), lr=args.vlr)
     last_a = [-1, -1, -1]
 
     # load model
@@ -176,20 +182,25 @@ if __name__ == '__main__':
 
     # for self-play
     prev_policies = deque(maxlen=args.prev_pi)
+    prev_policies.append(policy.state_dict())
     oppo_index = 0
 
     for i_episode in range(1, 100001):
+        # self-play start
+        if i_episode == args.start_self:
+            for i in range(1, 3):
+                random_index = random.randint(0, len(prev_policies) - 1)
+                oppo_policy[i].load_state_dict(prev_policies[random_index])
+            trainer = env.train([None, opponent, opponent, opponent])
+
         observation, ep_reward = trainer.reset(), 0
-        process_reward.prev_len = 1
         process_reward.prev_alive = 3
 
         for step in range(1, 201):
             action = agent(observation, configuration, train=True)
-            v = value(preprocess(observation).to(device))
             observation, reward, done, info = trainer.step(action)
             reward = process_reward(observation, reward, done)
-            policy.rewards.append(reward)
-            value.values.append(v)
+            policy.saved_rewards.append(reward)
             ep_reward += reward
             actions.append(action2int[action])
             if done:
@@ -198,7 +209,7 @@ if __name__ == '__main__':
         running_reward = running_reward * 0.99 + ep_reward * 0.01
         running_steps = running_steps * 0.99 + step * 0.01
         entropies += deque(torch.cat(policy.saved_entropies).tolist())
-        values += deque(torch.cat(value.values).tolist())
+        values += deque(torch.cat(policy.saved_values).tolist())
 
         finish_episode()
 
@@ -208,16 +219,11 @@ if __name__ == '__main__':
                   f'Average steps: {running_steps:.2f}\t')
             tb.add_scalar('reward', running_reward, i_episode)
             tb.add_scalar('steps', running_steps, i_episode)
-            tb.add_histogram('actions', np.array(actions), i_episode)
+            tb.add_histogram('actions', np.array(actions), i_episode,
+                             bins=7)
             tb.add_histogram('entropies', np.array(entropies), i_episode)
             tb.add_histogram('values', np.array(values), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')
-
-        if i_episode == args.start_self:
-            for i in range(1, 3):
-                random_index = random.randint(0, len(prev_policies) - 1)
-                oppo_policy[i].load_state_dict(prev_policies[random_index])
-            trainer = env.train([None, opponent, opponent, opponent])
 
         if i_episode % args.change_interval == 0:
             prev_policies.append(policy.state_dict())
