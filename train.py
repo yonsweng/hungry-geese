@@ -13,26 +13,37 @@ from value_model import Value
 
 
 def process_reward(obs, reward, done):
+    '''
+    winning bonus:
+        10  if kill
+        -10 if killed
+    length bonus:
+        3 per length increase
+    step bonus:
+        1 per step
+    '''
+    killed, len_diff = 0, 0
+
     if obs.step == 1:
         reward -= 101
 
-    if done:
-        if reward > 0:
-            return process_reward.prev_alive * 10
-        else:
-            return -20
+    if reward == 0:  # if lose
+        killed = -1
+    else:
+        # calc killed
+        curr_alive = 0
+        for goose in obs.geese[1:]:
+            if len(goose) > 0:
+                curr_alive += 1
 
-    # if kill, get 10
-    curr_alive = 0
-    for goose in obs.geese[1:]:
-        if len(goose) > 0:
-            curr_alive += 1
-    killed = process_reward.prev_alive - curr_alive
-    process_reward.prev_alive = curr_alive
+        killed = process_reward.prev_alive - curr_alive
+        process_reward.prev_alive = curr_alive
 
-    curr_len = reward - 99
-    len_diff = curr_len - process_reward.prev_len
-    process_reward.prev_len = curr_len
+        if curr_alive > 0 and done:  # if step 199
+            killed = -1
+
+        len_diff = reward - 100
+
     return killed * 10 + len_diff * 3 + 1
 
 
@@ -159,6 +170,7 @@ if __name__ == '__main__':
     tb = SummaryWriter(comment=tag)
     running_reward, running_steps = 0, 0
     entropies = deque(maxlen=args.step_log_interval)
+    values = deque(maxlen=args.step_log_interval)
     actions = deque(maxlen=args.step_log_interval)
     action2int = {'NORTH': 0, 'EAST': 1, 'WEST': 2, 'SOUTH': 3}
 
@@ -186,6 +198,7 @@ if __name__ == '__main__':
         running_reward = running_reward * 0.99 + ep_reward * 0.01
         running_steps = running_steps * 0.99 + step * 0.01
         entropies += deque(torch.cat(policy.saved_entropies).tolist())
+        values += deque(torch.cat(value.values).tolist())
 
         finish_episode()
 
@@ -197,6 +210,7 @@ if __name__ == '__main__':
             tb.add_scalar('steps', running_steps, i_episode)
             tb.add_histogram('actions', np.array(actions), i_episode)
             tb.add_histogram('entropies', np.array(entropies), i_episode)
+            tb.add_histogram('values', np.array(values), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')
 
         if i_episode == args.start_self:
