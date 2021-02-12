@@ -62,23 +62,16 @@ def agent(observation, configuration, train=False):
     global ACTION_NAMES, device, policy, last_a, eps
     observation = preprocess(observation).to(device)
     logits, value = policy(observation)
+    probs = F.softmax(logits, 1)
+    m = Categorical(probs)
     if last_a != -1:
         # remove illigal move
         illigal_move = 3 - last_a  # opposite
-        mask = [a for a in range(4) if a != illigal_move]
-        mask = torch.tensor(mask, device=device)
-        probs = torch.zeros_like(logits, device=device)
-        probs[:, mask] = F.softmax(logits[:, mask], 1)
-        m = Categorical(probs)
-        if train:
-            eps *= 0.99999  # reduce random probability
-            action = m.sample()  # if random.random() >= eps \
-            # else mask[random.randint(0, 2)].unsqueeze(0)
-        else:
-            action = m.sample()
+        probs2 = probs.clone()
+        probs2[:, illigal_move] = 0
+        probs2 /= probs2.sum()
+        action = Categorical(probs2).sample()
     else:
-        probs = F.softmax(logits, 1)
-        m = Categorical(probs)
         action = m.sample()
     if train:
         policy.saved_log_probs.append(m.log_prob(action))
