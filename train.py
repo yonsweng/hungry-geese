@@ -25,7 +25,7 @@ def process_reward(obs, reward, done):
     if obs.step == 1:
         reward -= 101
 
-    if reward == 0:  # if lose
+    if reward <= 0:  # if lose
         killed = -2
     else:
         # calc killed
@@ -63,10 +63,10 @@ def finish_episode():
     td_targets = torch.cat(td_targets).squeeze()
     values = torch.cat(policy.saved_values).squeeze()
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
-    policy_loss += -sum(policy.saved_entropies).squeeze() \
-        * finish_episode.entropy_coef  # spread probs
+    # policy_loss += -sum(policy.saved_entropies).squeeze() \
+    #     * finish_episode.entropy_coef  # spread probs
     finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
-    value_loss = F.smooth_l1_loss(td_targets.detach(), values, reduction='sum')
+    value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
     loss = policy_loss + value_loss
 
     optimizer.zero_grad()
@@ -88,17 +88,17 @@ def opponent(observation, configuration):
     index = observation.index - 1
     observation = preprocess(observation).to(device)
     logits, _ = oppo_policy[index](observation)
+    probs = F.softmax(logits, 1)
+    m = Categorical(probs)
     if last_a[index] != -1:
         # remove illigal move
         illigal_move = 3 - last_a[index]  # opposite
-        mask = [a for a in range(4) if a != illigal_move]
-        mask = torch.tensor(mask, device=device)
-        probs = torch.zeros_like(logits, device=device)
-        probs[:, mask] = F.softmax(logits[:, mask], 1)
+        probs2 = probs.clone()
+        probs2[:, illigal_move] = 0
+        probs2 /= probs2.sum()
+        action = Categorical(probs2).sample()
     else:
-        probs = F.softmax(logits, 1)
-    m = Categorical(probs)
-    action = m.sample()
+        action = m.sample()
     last_a[index] = action.item()
     action = ACTION_NAMES[last_a[index]]
     return action
@@ -118,18 +118,18 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=1000,
                         metavar='N',
                         help='interval btw changing opponent (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='G',
-                        help='learning rate (default: 1e-5)')
+    parser.add_argument('--lr', type=float, default=2e-5, metavar='G',
+                        help='learning rate (default: 2e-5)')
     parser.add_argument('--l2', type=float, default=0, metavar='G',
                         help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
     parser.add_argument('--prev-pi', type=int, default=15, metavar='N',
                         help='# of previous policies to save (default: 15)')
-    parser.add_argument('--start-self', type=int, default=1, metavar='N',
-                        help='# of episodes before self-play (default: 2000)')
+    parser.add_argument('--start-self', type=int, default=30000, metavar='N',
+                        help='episode # to start self-play (default: 1)')
     # for train resume
-    parser.add_argument('--spread-until', type=int, default=50000,
+    parser.add_argument('--spread-until', type=int, default=0,
                         metavar='N',
                         help='entropy coef reduce until (0: off)')
     parser.add_argument('--load', type=str, metavar='S', default='',
@@ -157,7 +157,7 @@ if __name__ == '__main__':
     trainer = env.train([None,
                          'examples/simple_bfs.py',
                          'examples/risk_averse.py',
-                         'examples/bolier_goose.py'])
+                         'examples/mighty_boiler_goose.py'])
     policy.train()
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
     # value = Value().to(device)
@@ -186,7 +186,7 @@ if __name__ == '__main__':
     prev_policies.append(policy.state_dict())
     oppo_index = 0
 
-    for i_episode in range(1, 100001):
+    for i_episode in range(1, 200001):
         # self-play start
         if i_episode == args.start_self:
             for i in range(1, 3):
@@ -228,7 +228,8 @@ if __name__ == '__main__':
             tb.add_histogram('logits', np.array(logits), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')
 
-        if i_episode % args.change_interval == 0:
+        if i_episode > args.start_self \
+                and i_episode % args.change_interval == 0:
             prev_policies.append(policy.state_dict())
             random_index = random.randint(0, len(prev_policies) - 1)
             oppo_policy[oppo_index].load_state_dict(
