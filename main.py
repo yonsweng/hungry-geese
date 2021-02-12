@@ -1,3 +1,4 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,12 +12,11 @@ class Policy(nn.Module):
     """
     def __init__(self):
         super(Policy, self).__init__()
-        self.linear0 = nn.Linear(3 * 77, 1024)
-        self.linear1 = nn.Linear(1024, 1024)
-        self.linear2 = nn.Linear(1024, 1024)
-        self.linear3 = nn.Linear(1024, 1024)
-        self.plinear = nn.Linear(1024, 4)
-        self.vlinear = nn.Linear(1024, 1)
+        self.linear0 = nn.Linear(3 * 77, 8092)
+        self.linear1 = nn.Linear(8092, 2048)
+        self.linear2 = nn.Linear(2048, 512)
+        self.plinear = nn.Linear(512, 4)
+        self.vlinear = nn.Linear(512, 1)
         self.saved_log_probs = []
         self.saved_entropies = []
         self.saved_rewards = []
@@ -28,7 +28,6 @@ class Policy(nn.Module):
         x = F.relu(self.linear0(x))
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
-        x = F.relu(self.linear3(x))
         p = self.plinear(x)
         v = self.vlinear(x)
         return p, v
@@ -39,7 +38,11 @@ ACTION_NAMES = ['NORTH', 'EAST', 'WEST', 'SOUTH']
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 policy = Policy().to(device).eval()
 last_a = -1
+
+# for random action
+RANDOM_STEPS = 2000000
 eps = 0.1
+eps_reduce = eps / RANDOM_STEPS
 
 if __name__ != 'main':
     # load policy
@@ -67,12 +70,18 @@ def agent(observation, configuration, train=False):
     probs = F.softmax(logits, 1)
     m = Categorical(probs)
     if last_a != -1:
-        # remove illigal move
         illigal_move = 3 - last_a  # opposite
-        probs2 = probs.clone()
-        probs2[:, illigal_move] = 0
-        probs2 /= probs2.sum()
-        action = Categorical(probs2).sample()
+        # give some random action
+        if train and eps > 0 and random.random() < eps:
+            rand = [i for i in range(4) if i != illigal_move]
+            rand = rand[random.randint(0, 2)]
+            action = torch.tensor([rand], device=device)
+            eps -= eps_reduce
+        else:
+            probs2 = probs.clone()
+            probs2[:, illigal_move] = 0
+            probs2 /= probs2.sum()
+            action = Categorical(probs2).sample()
     else:
         action = m.sample()
     if train:

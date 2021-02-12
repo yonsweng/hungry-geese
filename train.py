@@ -65,7 +65,7 @@ def finish_episode():
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
     # policy_loss += -sum(policy.saved_entropies).squeeze() \
     #     * finish_episode.entropy_coef  # spread probs
-    finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
+    # finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
     value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
     loss = policy_loss + value_loss
 
@@ -118,20 +118,20 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=1000,
                         metavar='N',
                         help='interval btw changing opponent (default: 1000)')
-    parser.add_argument('--lr', type=float, default=2e-5, metavar='G',
-                        help='learning rate (default: 2e-5)')
+    parser.add_argument('--lr', type=float, default=1e-5, metavar='G',
+                        help='learning rate (default: 1e-5)')
     parser.add_argument('--l2', type=float, default=0, metavar='G',
                         help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
                         help='td(n) (default: 0)')
     parser.add_argument('--prev-pi', type=int, default=15, metavar='N',
                         help='# of previous policies to save (default: 15)')
-    parser.add_argument('--start-self', type=int, default=30000, metavar='N',
+    parser.add_argument('--start-self', type=int, default=1, metavar='N',
                         help='episode # to start self-play (default: 1)')
     # for train resume
-    parser.add_argument('--spread-until', type=int, default=0,
-                        metavar='N',
-                        help='entropy coef reduce until (0: off)')
+    # parser.add_argument('--spread-until', type=int, default=0,
+    #                     metavar='N',
+    #                     help='entropy coef reduce until (0: off)')
     parser.add_argument('--load', type=str, metavar='S', default='',
                         help='loading model name')
     args = parser.parse_args()
@@ -144,14 +144,13 @@ if __name__ == '__main__':
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-
     eps = np.finfo(np.float32).eps.item()
-    if args.spread_until > 0:
-        finish_episode.entropy_coef = 1.
-        finish_episode.entropy_coef_reduce = 0.1 ** (1 / args.spread_until)
-    else:
-        finish_episode.entropy_coef = 0
-        finish_episode.entropy_coef_reduce = 1
+    # if args.spread_until > 0:
+    #     finish_episode.entropy_coef = 1.
+    #     finish_episode.entropy_coef_reduce = 0.1 ** (1 / args.spread_until)
+    # else:
+    #     finish_episode.entropy_coef = 0
+    #     finish_episode.entropy_coef_reduce = 1
 
     # training the agent in the first position
     trainer = env.train([None,
@@ -161,8 +160,8 @@ if __name__ == '__main__':
     policy.train()
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
     # value = Value().to(device)
-    optimizer = optim.Adam(policy.parameters(), lr=args.lr,
-                           weight_decay=args.l2)
+    optimizer = optim.RMSprop(policy.parameters(), lr=args.lr,
+                              weight_decay=args.l2)
     # value_optim = optim.Adam(value.parameters(), lr=args.vlr)
     last_a = [-1, -1, -1]
 
@@ -189,7 +188,7 @@ if __name__ == '__main__':
     for i_episode in range(1, 200001):
         # self-play start
         if i_episode == args.start_self:
-            for i in range(1, 3):
+            for i in range(3):
                 random_index = random.randint(0, len(prev_policies) - 1)
                 oppo_policy[i].load_state_dict(prev_policies[random_index])
             trainer = env.train([None, opponent, opponent, opponent])
