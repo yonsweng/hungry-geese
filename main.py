@@ -11,10 +11,11 @@ class Policy(nn.Module):
     """
     def __init__(self):
         super(Policy, self).__init__()
-        self.linear0 = nn.Linear(3 * 77, 4096)
-        self.linear1 = nn.Linear(4096, 2048)
-        self.linear2 = nn.Linear(2048, 1024)
-        self.linear3 = nn.Linear(1024, 4)
+        self.linear0 = nn.Linear(3 * 77, 1024)
+        self.linear1 = nn.Linear(1024, 1024)
+        self.linear2 = nn.Linear(1024, 1024)
+        self.linear3 = nn.Linear(1024, 1024)
+        self.plinear = nn.Linear(1024, 4)
         self.vlinear = nn.Linear(1024, 1)
         self.saved_log_probs = []
         self.saved_entropies = []
@@ -27,7 +28,8 @@ class Policy(nn.Module):
         x = F.relu(self.linear0(x))
         x = F.relu(self.linear1(x))
         x = F.relu(self.linear2(x))
-        p = self.linear3(x)
+        x = F.relu(self.linear3(x))
+        p = self.plinear(x)
         v = self.vlinear(x)
         return p, v
 
