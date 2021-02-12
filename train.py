@@ -66,7 +66,7 @@ def finish_episode():
     policy_loss += -sum(policy.saved_entropies).squeeze() \
         * finish_episode.entropy_coef  # spread probs
     finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
-    value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
+    value_loss = F.smooth_l1_loss(td_targets.detach(), values, reduction='sum')
     loss = policy_loss + value_loss
 
     optimizer.zero_grad()
@@ -81,7 +81,7 @@ def finish_episode():
     del policy.saved_log_probs[:]
     del policy.saved_entropies[:]
     del policy.saved_values[:]
-    # del value.values[:]
+    del policy.saved_logits[:]
 
 
 def opponent(observation, configuration):
@@ -178,6 +178,7 @@ if __name__ == '__main__':
     entropies = deque(maxlen=args.step_log_interval)
     values = deque(maxlen=args.step_log_interval)
     actions = deque(maxlen=args.step_log_interval)
+    logits = deque(maxlen=args.step_log_interval)
     action2int = {'NORTH': 0, 'EAST': 1, 'WEST': 2, 'SOUTH': 3}
 
     # for self-play
@@ -210,6 +211,7 @@ if __name__ == '__main__':
         running_steps = running_steps * 0.99 + step * 0.01
         entropies += deque(torch.cat(policy.saved_entropies).tolist())
         values += deque(torch.cat(policy.saved_values).tolist())
+        logits += deque(torch.cat(policy.saved_logits).reshape(-1))
 
         finish_episode()
 
@@ -223,6 +225,7 @@ if __name__ == '__main__':
                              bins=7)
             tb.add_histogram('entropies', np.array(entropies), i_episode)
             tb.add_histogram('values', np.array(values), i_episode)
+            tb.add_histogram('logits', np.array(logits), i_episode)
             torch.save(policy.state_dict(), f'models/policy_{tag}.pt')
 
         if i_episode % args.change_interval == 0:

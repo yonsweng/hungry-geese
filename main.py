@@ -20,6 +20,7 @@ class Policy(nn.Module):
         self.saved_entropies = []
         self.saved_rewards = []
         self.saved_values = []
+        self.saved_logits = []
 
     def forward(self, x):
         x = torch.flatten(x, 1)
@@ -83,6 +84,7 @@ def agent(observation, configuration, train=False):
         policy.saved_log_probs.append(m.log_prob(action))
         policy.saved_entropies.append(m.entropy())
         policy.saved_values.append(value)
+        policy.saved_logits.append(logits)
     last_a = action.item()
     action = ACTION_NAMES[last_a]
     return action
