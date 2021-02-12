@@ -66,7 +66,7 @@ def finish_episode():
     # policy_loss += -sum(policy.saved_entropies).squeeze() \
     #     * finish_episode.entropy_coef  # spread probs
     # finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
-    value_loss = F.mse_loss(td_targets.detach(), values, reduction='sum')
+    value_loss = F.smooth_l1_loss(values, td_targets.detach(), reduction='sum')
     loss = policy_loss + value_loss
 
     optimizer.zero_grad()
@@ -106,8 +106,8 @@ def opponent(observation, configuration):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='A2C')
-    parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                        help='discount factor (default: 0.99)')
+    parser.add_argument('--gamma', type=float, default=0.9, metavar='G',
+                        help='discount factor (default: 0.9)')
     parser.add_argument('--seed', type=int, default=543, metavar='N',
                         help='random seed (default: 543)')
     parser.add_argument('--log-interval', type=int, default=500, metavar='N',
