@@ -63,9 +63,11 @@ def finish_episode():
     td_targets = torch.cat(td_targets).squeeze()
     values = torch.cat(policy.saved_values).squeeze()
     policy_loss = (-log_probs * (td_targets - values).detach()).sum()
-    # policy_loss += -sum(policy.saved_entropies).squeeze() \
-    #     * finish_episode.entropy_coef  # spread probs
-    # finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
+    if finish_episode.entropy_coef > 0:
+        # spread probs
+        policy_loss += -sum(policy.saved_entropies).squeeze() \
+            * finish_episode.entropy_coef
+        finish_episode.entropy_coef -= finish_episode.entropy_coef_reduce
     value_loss = F.smooth_l1_loss(values, td_targets.detach(), reduction='sum')
     loss = policy_loss + args.value_coef * value_loss
 
@@ -131,9 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--start-self', type=int, default=1, metavar='N',
                         help='episode # to start self-play (default: 1)')
     # for train resume
-    # parser.add_argument('--spread-until', type=int, default=0,
-    #                     metavar='N',
-    #                     help='entropy coef reduce until (0: off)')
+    parser.add_argument('--entropy-steps', type=int, default=0,
+                        metavar='N', help='steps for entropy loss (0: off)')
     parser.add_argument('--load', type=str, metavar='S', default='',
                         help='loading model name')
     args = parser.parse_args()
@@ -147,12 +148,11 @@ if __name__ == '__main__':
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     eps = np.finfo(np.float32).eps.item()
-    # if args.spread_until > 0:
-    #     finish_episode.entropy_coef = 1.
-    #     finish_episode.entropy_coef_reduce = 0.1 ** (1 / args.spread_until)
-    # else:
-    #     finish_episode.entropy_coef = 0
-    #     finish_episode.entropy_coef_reduce = 1
+    if args.entropy_steps > 0:
+        finish_episode.entropy_coef = 1
+        finish_episode.entropy_coef_reduce = 1 / args.entropy_steps
+    else:
+        finish_episode.entropy_coef = 0
 
     # training the agent in the first position
     trainer = env.train([None,
