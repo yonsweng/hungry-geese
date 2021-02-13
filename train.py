@@ -18,7 +18,9 @@ def process_reward(obs, reward, done):
         0.5 if kill
         -1. if killed
     length bonus:
-        .1 per length increase
+        .2 per length increase
+    step bonus:
+        .1 per step
     '''
     killed, len_diff = 0, 0
 
