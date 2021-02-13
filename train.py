@@ -9,7 +9,6 @@ from torch.utils.tensorboard import SummaryWriter
 from collections import deque
 from kaggle_environments import make
 from main import Policy, ACTION_NAMES, device, policy, preprocess, agent
-# from value_model import Value
 
 
 def process_reward(obs, reward, done):
