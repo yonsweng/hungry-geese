@@ -59,7 +59,7 @@ def preprocess(observation):
             i = 1 if i == observation.index else 2
             x[0, i, goose[0]] = 1.
             for part in goose[1:]:
-                x[0, i, part] = -1.
+                x[0, i, part] = .5
     return x
 
 
