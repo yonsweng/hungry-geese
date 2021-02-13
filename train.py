@@ -115,10 +115,10 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=1000,
                         metavar='N',
                         help='interval btw changing opponent (default: 1000)')
-    parser.add_argument('--lr', type=float, default=1e-5, metavar='G',
-                        help='learning rate (default: 1e-5)')
-    parser.add_argument('--value-coef', type=float, default=0.1, metavar='G',
-                        help='coefficient for value loss (default: 0.1)')
+    parser.add_argument('--lr', type=float, default=1e-6, metavar='G',
+                        help='learning rate (default: 1e-6)')
+    parser.add_argument('--value-coef', type=float, default=1, metavar='G',
+                        help='coefficient for value loss (default: 1)')
     parser.add_argument('--l2', type=float, default=0, metavar='G',
                         help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
