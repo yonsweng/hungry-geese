@@ -12,11 +12,10 @@ class Policy(nn.Module):
     """
     def __init__(self):
         super(Policy, self).__init__()
-        self.linear0 = nn.Linear(3 * 77, 8092)
-        self.linear1 = nn.Linear(8092, 2048)
-        self.linear2 = nn.Linear(2048, 512)
-        self.plinear = nn.Linear(512, 4)
-        self.vlinear = nn.Linear(512, 1)
+        self.linear0 = nn.Linear(3 * 77, 4096)
+        self.linear1 = nn.Linear(4096, 1024)
+        self.plinear = nn.Linear(1024, 4)
+        self.vlinear = nn.Linear(1024, 1)
         self.saved_log_probs = []
         self.saved_entropies = []
         self.saved_rewards = []
@@ -27,7 +26,6 @@ class Policy(nn.Module):
         x = torch.flatten(x, 1)
         x = F.relu(self.linear0(x))
         x = F.relu(self.linear1(x))
-        x = F.relu(self.linear2(x))
         p = self.plinear(x)
         v = self.vlinear(x)
         return p, v
