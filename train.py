@@ -67,7 +67,7 @@ def finish_episode():
     #     * finish_episode.entropy_coef  # spread probs
     # finish_episode.entropy_coef *= finish_episode.entropy_coef_reduce
     value_loss = F.smooth_l1_loss(values, td_targets.detach(), reduction='sum')
-    loss = policy_loss + value_loss
+    loss = policy_loss + args.value_coef * value_loss
 
     optimizer.zero_grad()
     # value_optim.zero_grad()
@@ -120,6 +120,8 @@ if __name__ == '__main__':
                         help='interval btw changing opponent (default: 1000)')
     parser.add_argument('--lr', type=float, default=1e-5, metavar='G',
                         help='learning rate (default: 1e-5)')
+    parser.add_argument('--value-coef', type=float, default=0.1, metavar='G',
+                        help='coefficient for value loss (default: 0.1)')
     parser.add_argument('--l2', type=float, default=0, metavar='G',
                         help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
