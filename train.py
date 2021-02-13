@@ -72,12 +72,8 @@ def finish_episode():
     loss = policy_loss + args.value_coef * value_loss
 
     optimizer.zero_grad()
-    # value_optim.zero_grad()
     loss.backward()
-    # policy_loss.backward()
-    # value_loss.backward()
     optimizer.step()
-    # value_optim.step()
 
     del policy.saved_rewards[:]
     del policy.saved_log_probs[:]
@@ -161,10 +157,8 @@ if __name__ == '__main__':
                          'examples/mighty_boiler_goose.py'])
     policy.train()
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
-    # value = Value().to(device)
     optimizer = optim.RMSprop(policy.parameters(), lr=args.lr,
                               weight_decay=args.l2)
-    # value_optim = optim.Adam(value.parameters(), lr=args.vlr)
     last_a = [-1, -1, -1]
 
     # load model
