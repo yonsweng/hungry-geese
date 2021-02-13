@@ -42,7 +42,7 @@ def process_reward(obs, reward, done):
 
         len_diff = reward - 100
 
-    return killed * 0.5 + len_diff * 0.1
+    return killed * 0.5 + len_diff * 0.2 + 0.1
 
 
 def finish_episode():
