@@ -224,7 +224,7 @@ if __name__ == '__main__':
 
         if i_episode > args.start_self \
                 and i_episode % args.change_interval == 0:
-            prev_policies.append(policy.state_dict())
+            prev_policies.append(policy.state_dict().copy())
             random_index = random.randint(0, len(prev_policies) - 1)
             oppo_policy[oppo_index].load_state_dict(
                 prev_policies[random_index])
