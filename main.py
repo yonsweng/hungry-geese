@@ -70,16 +70,16 @@ def agent(observation, configuration, train=False):
     probs = F.softmax(logits, 1)
     m = Categorical(probs)
     if last_a != -1:
-        illigal_move = 3 - last_a  # opposite
+        illegal_move = 3 - last_a  # opposite
         # give some random action
         if train and eps > 0 and random.random() < eps:
-            rand = [i for i in range(4) if i != illigal_move]
+            rand = [i for i in range(4) if i != illegal_move]
             rand = rand[random.randint(0, 2)]
             action = torch.tensor([rand], device=device)
             eps -= eps_reduce
         else:
             probs2 = probs.clone()
-            probs2[:, illigal_move] = 0
+            probs2[:, illegal_move] = 0
             probs2 /= probs2.sum()
             action = Categorical(probs2).sample()
     else:
