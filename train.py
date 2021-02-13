@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from collections import deque
+from copy import deepcopy
 from kaggle_environments import make
 from main import Policy, ACTION_NAMES, device, policy, preprocess, agent
 
@@ -224,7 +225,7 @@ if __name__ == '__main__':
 
         if i_episode > args.start_self \
                 and i_episode % args.change_interval == 0:
-            prev_policies.append(policy.state_dict().copy())
+            prev_policies.append(deepcopy(policy.state_dict()))
             random_index = random.randint(0, len(prev_policies) - 1)
             oppo_policy[oppo_index].load_state_dict(
                 prev_policies[random_index])
