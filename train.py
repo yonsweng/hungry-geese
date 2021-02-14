@@ -53,7 +53,7 @@ def agent(obs, _, train=False):
     global obs_prev
 
     x = make_input(obs)
-    if train:
+    if obs.index == 3:
         obs_prev = obs
 
     xt = torch.from_numpy(x).unsqueeze(0).to(device)
