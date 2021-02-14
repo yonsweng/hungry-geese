@@ -19,6 +19,7 @@ yonsweng (Choi Yeonung)
 in Feb 2021
 '''
 obs_prev = None
+action_prev = [None] * 4
 
 
 def make_input(obs):
@@ -59,14 +60,27 @@ def agent(obs, _, train=False):
 
     p = o['policy'].squeeze(0)
     m = Categorical(logits=p)
-    action = m.sample()
+
+    if action_prev[obs.index] is None:
+        action = m.sample()
+    else:
+        # remove illegal action
+        illegal_action = action_prev[obs.index] + 1 \
+                         if action_prev[obs.index] % 2 == 0 \
+                         else action_prev[obs.index] - 1
+        probs = F.softmax(p, dim=0)
+        probs[illegal_action] = 0
+        probs /= probs.sum()
+        action = Categorical(probs).sample()
 
     if train:
         model.saved_log_probs.append(m.log_prob(action))
         model.saved_values.append(o['value'].squeeze())
 
     actions = ['NORTH', 'SOUTH', 'WEST', 'EAST']
-    return actions[action.item()]
+    action = action.item()
+    action_prev[obs.index] = action
+    return actions[action]
 
 
 def process_reward(obs, done):
