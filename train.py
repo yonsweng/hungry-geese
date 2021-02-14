@@ -80,7 +80,7 @@ def process_reward(obs, done):
     if done:
         alive = 0
         for goose in obs.geese[1:]:
-            if len(goose) >= len(obs.geese[0]):
+            if len(goose) > len(obs.geese[0]):
                 alive += 1
         return (3 - 2 * alive) / 3
     return 0.
