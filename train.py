@@ -1,3 +1,6 @@
+import pickle
+import bz2
+import base64
 import argparse
 import random
 import numpy as np
@@ -8,6 +11,7 @@ from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
 from kaggle_environments import make
 from models import GeeseNet
+from examples.param import PARAM
 
 
 '''
@@ -179,7 +183,11 @@ if __name__ == '__main__':
 
     # load weights
     if args.load != '':
-        model.load_state_dict(torch.load(args.load, map_location=device))
+        if args.load == 'param':
+            state_dict = pickle.loads(bz2.decompress(base64.b64decode(PARAM)))
+            model.load_state_dict(state_dict)
+        else:
+            model.load_state_dict(torch.load(args.load, map_location=device))
 
     model.to(device)
 
