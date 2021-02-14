@@ -10,17 +10,18 @@ from collections import deque
 from copy import deepcopy
 from kaggle_environments import make
 from main import Policy, ACTION_NAMES, device, policy, preprocess, agent
+from models import Value
 
 
 def process_reward(obs, reward, done):
     '''
     winning bonus:
-        0.5 if kill
-        -1. if killed
+        10  if kill
+        -30 if killed
     length bonus:
-        .2 per length increase
+        5 per length increase
     step bonus:
-        .1 per step
+        1 per step
     '''
     killed, len_diff = 0, 0
 
@@ -28,7 +29,7 @@ def process_reward(obs, reward, done):
         reward -= 101
 
     if reward <= 0:  # if lose
-        killed = -2
+        killed = 0
     else:
         # calc killed
         curr_alive = 0
@@ -40,14 +41,14 @@ def process_reward(obs, reward, done):
         process_reward.prev_alive = curr_alive
 
         if curr_alive > 0 and done:  # if step 199
-            killed = -2
+            killed = 0
 
         len_diff = reward - 100
 
-    return killed * 0.5 + len_diff * 0.2 + 0.1
+    return 10 * killed + 0 * len_diff + 1
 
 
-def finish_episode():
+def finish_episode(i_episode):
     epi_len = len(policy.saved_rewards)
     sum_reward = 0.
     td_targets = [0.] * epi_len
@@ -58,45 +59,47 @@ def finish_episode():
             sum_reward -= gamma_td * policy.saved_rewards[tail]
         sum_reward = args.gamma * sum_reward + policy.saved_rewards[i]
         td_targets[i] = sum_reward + \
-            (gamma_td * args.gamma * policy.saved_values[tail]
+            (gamma_td * args.gamma * value.saved_values[tail]
              if tail < epi_len else torch.tensor([[0.]], device=device))
 
     log_probs = torch.cat(policy.saved_log_probs)
     td_targets = torch.cat(td_targets).squeeze()
-    values = torch.cat(policy.saved_values).squeeze()
-    policy_loss = (-log_probs * (td_targets - values).detach()).sum()
+    values = torch.cat(value.saved_values).squeeze()
+    policy_loss = -(log_probs * (td_targets - values).detach()).sum()
     if finish_episode.entropy_coef > 0:
         # spread probs
         policy_loss += -sum(policy.saved_entropies).squeeze() \
             * finish_episode.entropy_coef
         finish_episode.entropy_coef -= finish_episode.entropy_coef_reduce
     value_loss = F.smooth_l1_loss(values, td_targets.detach(), reduction='sum')
-    loss = policy_loss + args.value_coef * value_loss
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    policy_loss.backward()
+    value_loss.backward()
+    if i_episode % args.batch_size == 0:
+        optimizer.step()
+        value_optimizer.step()
+        optimizer.zero_grad()
+        value_optimizer.zero_grad()
 
     del policy.saved_rewards[:]
     del policy.saved_log_probs[:]
     del policy.saved_entropies[:]
-    del policy.saved_values[:]
     del policy.saved_logits[:]
+    del value.saved_values[:]
 
 
 def opponent(observation, configuration):
     index = observation.index - 1
-    observation = preprocess(observation).to(device)
-    logits, _ = oppo_policy[index](observation)
-    probs = F.softmax(logits, 1)
-    m = Categorical(probs)
+    observation = preprocess(observation, configuration)
+    logits = oppo_policy[index](observation)
+    m = Categorical(logits=logits)
     if last_a[index] != -1:
         # remove illigal move
         illigal_move = 3 - last_a[index]  # opposite
-        probs2 = probs.clone()
-        probs2[:, illigal_move] = 0
-        probs2 /= probs2.sum()
-        action = Categorical(probs2).sample()
+        probs = F.softmax(logits, 1)
+        probs[:, illigal_move] = 0
+        probs /= probs.sum()
+        action = Categorical(probs).sample()
     else:
         action = m.sample()
     last_a[index] = action.item()
@@ -118,10 +121,12 @@ if __name__ == '__main__':
     parser.add_argument('--change-interval', type=int, default=1000,
                         metavar='N',
                         help='interval btw changing opponent (default: 1000)')
+    parser.add_argument('--batch-size', type=int, default=1, metavar='N',
+                        help='# of episodes for batching (default: 1)')
     parser.add_argument('--lr', type=float, default=1e-6, metavar='G',
                         help='learning rate (default: 1e-6)')
-    parser.add_argument('--value-coef', type=float, default=1, metavar='G',
-                        help='coefficient for value loss (default: 1)')
+    parser.add_argument('--vlr', type=float, default=1e-6, metavar='G',
+                        help='learning rate for value (default: 1e-6)')
     parser.add_argument('--l2', type=float, default=0, metavar='G',
                         help='l2 regularization (default: 0)')
     parser.add_argument('--td', type=int, default=0, metavar='N',
@@ -159,8 +164,9 @@ if __name__ == '__main__':
                          'examples/mighty_boiler_goose.py'])
     policy.train()
     oppo_policy = [Policy().to(device).eval() for _ in range(3)]
-    optimizer = optim.RMSprop(policy.parameters(), lr=args.lr,
-                              weight_decay=args.l2)
+    value = Value().to(device)
+    optimizer = optim.Adam(policy.parameters(), lr=args.lr)
+    value_optimizer = optim.Adam(value.parameters(), lr=args.vlr)
     last_a = [-1, -1, -1]
 
     # load model
@@ -195,10 +201,12 @@ if __name__ == '__main__':
         process_reward.prev_alive = 3
 
         for step in range(1, 201):
-            action = agent(observation, configuration, train=True)
+            action, obs = agent(observation, configuration, train=True)
+            v = value(obs)
             observation, reward, done, info = trainer.step(action)
             reward = process_reward(observation, reward, done)
             policy.saved_rewards.append(reward)
+            value.saved_values.append(v)
             ep_reward += reward
             actions.append(action2int[action])
             if done:
@@ -207,10 +215,10 @@ if __name__ == '__main__':
         running_reward = running_reward * 0.99 + ep_reward * 0.01
         running_steps = running_steps * 0.99 + step * 0.01
         entropies += deque(torch.cat(policy.saved_entropies).tolist())
-        values += deque(torch.cat(policy.saved_values).tolist())
+        values += deque(torch.cat(value.saved_values).tolist())
         logits += deque(torch.cat(policy.saved_logits).reshape(-1))
 
-        finish_episode()
+        finish_episode(i_episode)
 
         if i_episode % args.log_interval == 0:
             print(f'Episode {i_episode}\t'
