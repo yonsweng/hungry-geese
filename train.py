@@ -53,7 +53,8 @@ def agent(obs, _, train=False):
     global obs_prev
 
     x = make_input(obs)
-    obs_prev = obs
+    if train:
+        obs_prev = obs
 
     xt = torch.from_numpy(x).unsqueeze(0).to(device)
     o = model(xt)
@@ -61,17 +62,17 @@ def agent(obs, _, train=False):
     p = o['policy'].squeeze(0)
     m = Categorical(logits=p)
 
-    if action_prev[obs.index] is None:
-        action = m.sample()
-    else:
-        # remove illegal action
-        illegal_action = action_prev[obs.index] + 1 \
-                         if action_prev[obs.index] % 2 == 0 \
-                         else action_prev[obs.index] - 1
-        probs = F.softmax(p, dim=0)
-        probs[illegal_action] = 0
-        probs /= probs.sum()
-        action = Categorical(probs).sample()
+    # if action_prev[obs.index] is None:
+    action = m.sample()
+    # else:
+    #     # remove illegal action
+    #     illegal_action = action_prev[obs.index] + 1 \
+    #                      if action_prev[obs.index] % 2 == 0 \
+    #                      else action_prev[obs.index] - 1
+    #     probs = F.softmax(p, dim=0)
+    #     probs[illegal_action] = 0
+    #     probs /= probs.sum()
+    #     action = Categorical(probs).sample()
 
     if train:
         model.saved_log_probs.append(m.log_prob(action))
@@ -92,11 +93,24 @@ def process_reward(obs, done):
         -1   if 4th
     '''
     if done:
-        alive = 0
-        for goose in obs.geese[1:]:
-            if len(goose) > len(obs.geese[0]):
-                alive += 1
-        return (3 - 2 * alive) / 3
+        if len(obs.geese[0]) == 0:  # if I'm dead
+            rank = 1
+            for i, goose in enumerate(obs.geese[1:], 1):
+                if len(goose) > 0:
+                    rank += 1
+                else:  # if goose i is dead
+                    if len(obs_prev.geese[i]) > len(obs_prev.geese[0]):
+                        rank += 1
+                    elif len(obs_prev.geese[i]) == len(obs_prev.geese[0]):
+                        rank += 0.5
+        else:  # if I'm alive
+            rank = 1
+            for i, goose in enumerate(obs.geese[1:], 1):
+                if len(goose) > len(obs.geese[0]):
+                    rank += 1
+                elif len(goose) == len(obs.geese[0]):
+                    rank += 0.5
+        return (3 - 2 * (rank - 1)) / 3
     return 0.
 
 
