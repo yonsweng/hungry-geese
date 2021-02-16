@@ -93,7 +93,6 @@ class HungryGeeseEnv(gym.Env):
             for p, pos_list in enumerate(self.obs_prev['geese']):
                 for pos in pos_list[:1]:
                     b[12 + (p - obs['index']) % 4, pos] = 1
-                    b[-1, pos] = 0
 
         # food
         for pos in obs['food']:
