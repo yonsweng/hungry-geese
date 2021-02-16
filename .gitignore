@@ -4,5 +4,3 @@ dataset
 examples
 models
 runs
-ppo_logs
-ppo_models

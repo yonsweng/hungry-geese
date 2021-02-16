@@ -31,22 +31,28 @@ class HungryGeeseEnv(gym.Env):
         # They must be gym.spaces objects
         self.action_space = spaces.Discrete(len(self.actions))
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(17, self.rows * self.columns), dtype=np.uint8
+            low=0, high=1, shape=(18, self.rows, self.columns), dtype=np.uint8
         )
 
         self.past_models = [None, None, None]
         self.change_index = 0
 
+        # first model load
+        for _ in range(3):
+            self.change_model()
+
         self.obs_prev = None
 
     def change_model(self):
-        path = 'ppo_models'
-        files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
-        files = sorted(files, key=getctime, reverse=True)
-        model_name = files[random.randrange(min(len(files), 10))]
-        self.past_models[self.change_index] = PPO.load(model_name)
-        # print(self.change_index, model_name)
-        self.change_index = (self.change_index + 1) % len(self.past_models)
+        path = 'models'
+        try:
+            files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
+            files = sorted(files, key=getctime, reverse=True)
+            model_name = files[random.randrange(min(len(files), 10))]
+            self.past_models[self.change_index] = PPO.load(model_name)
+            self.change_index = (self.change_index + 1) % len(self.past_models)
+        except Exception as e:
+            print(e)
 
     def opponent(self, obs, conf):
         model_index = obs.index
@@ -62,32 +68,38 @@ class HungryGeeseEnv(gym.Env):
             self.obs_prev = obs_backup
         return Action(action).name
 
-    # Modified by https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
+    # Modified from https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
     def process_obs(self, obs):
-        b = np.zeros((17, 7 * 11), dtype=np.float32)
+        b = np.zeros((18, 7 * 11), dtype=np.float32)
+        b[-1] = 1  # empty cells
 
         for p, pos_list in enumerate(obs['geese']):
             # head position
             for pos in pos_list[:1]:
                 b[0 + (p - obs['index']) % 4, pos] = 1
+                b[-1, pos] = 0
             # tip position
             for pos in pos_list[-1:]:
                 b[4 + (p - obs['index']) % 4, pos] = 1
+                b[-1, pos] = 0
             # whole position
             for pos in pos_list:
                 b[8 + (p - obs['index']) % 4, pos] = 1
+                b[-1, pos] = 0
 
         # previous head position
         if self.obs_prev is not None:
             for p, pos_list in enumerate(self.obs_prev['geese']):
                 for pos in pos_list[:1]:
                     b[12 + (p - obs['index']) % 4, pos] = 1
+                    b[-1, pos] = 0
 
         # food
         for pos in obs['food']:
             b[16, pos] = 1
+            b[-1, pos] = 0
 
-        return b.reshape(-1, 7 * 11)
+        return b.reshape(-1, 7, 11)
 
     def process_reward(self, obs, done):
         '''
