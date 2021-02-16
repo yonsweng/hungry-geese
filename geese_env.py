@@ -12,9 +12,10 @@ from kaggle_environments.envs.hungry_geese.hungry_geese import Action
 
 
 class HungryGeeseEnv(gym.Env):
-    def __init__(self, debug=False):
+    def __init__(self, save_path, debug=False):
         super(HungryGeeseEnv, self).__init__()
 
+        self.save_path = save_path
         self.debug = debug
         self.actions = [action for action in Action]
         self.action_offset = 1
@@ -44,7 +45,7 @@ class HungryGeeseEnv(gym.Env):
         self.obs_prev = None
 
     def change_model(self):
-        path = 'models'
+        path = self.save_path
         try:
             files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
             files = sorted(files, key=getctime, reverse=True)
