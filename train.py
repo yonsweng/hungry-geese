@@ -22,11 +22,11 @@ else:
     env_kwargs = dict(save_path=args.save_path)
     env = make_vec_env(HungryGeeseEnv, n_envs=args.n_envs,
                        env_kwargs=env_kwargs)
-    model = PPO(CustomActorCriticPolicy, env, verbose=1,
+    model = PPO(CustomActorCriticPolicy, env, verbose=0,
                 tensorboard_log='runs')
 
 callback = CustomCallback(
-    save_freq=8000, save_path=args.save_path, name_prefix='model'
+    save_freq=10000, save_path=args.save_path, name_prefix='model'
 )  # save_freq should be divided by n_envs
 
-model.learn(4000000, callback=callback, reset_num_timesteps=False)
+model.learn(10000000, callback=callback, reset_num_timesteps=False)
