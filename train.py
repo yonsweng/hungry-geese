@@ -29,4 +29,4 @@ callback = CustomCallback(
     save_freq=10000, save_path=args.save_path, name_prefix='model'
 )  # save_freq should be divided by n_envs
 
-model.learn(10000000, callback=callback, reset_num_timesteps=False)
+model.learn(10000000, callback=callback, reset_num_timesteps=True)

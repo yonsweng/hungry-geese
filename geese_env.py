@@ -32,7 +32,8 @@ class HungryGeeseEnv(gym.Env):
         # They must be gym.spaces objects
         self.action_space = spaces.Discrete(len(self.actions))
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(18, self.rows, self.columns), dtype=np.uint8
+            low=0, high=1, shape=(18, self.rows, self.columns),
+            dtype=np.float32
         )
 
         self.past_models = [None, None, None]
