@@ -12,7 +12,7 @@ from kaggle_environments.envs.hungry_geese.hungry_geese import Action
 
 
 class HungryGeeseEnv(gym.Env):
-    def __init__(self, save_path, debug=False):
+    def __init__(self, save_path, self_play_start, debug=False):
         super(HungryGeeseEnv, self).__init__()
 
         self.save_path = save_path
@@ -24,9 +24,23 @@ class HungryGeeseEnv(gym.Env):
         self.columns = self.env.configuration.columns
         self.hunger_rate = self.env.configuration.hunger_rate
         self.min_food = self.env.configuration.min_food
-        self.trainer = self.env.train(
-            [None, self.opponent, self.opponent, self.opponent]
-        )
+
+        self.obs_prev = None
+        self.past_models = [None, None, None]
+        self.last_actions = [-1, -1, -1]
+        self.random_eps = 0.1
+        self.change_index = 0
+
+        self.self_play = False
+        self.trainer = self.env.train([
+            None,
+            'examples/simple_bfs.py',
+            'examples/mighty_boiler_goose.py',
+            'examples/risk_averse.py'
+        ])
+
+        if self_play_start == 0:
+            self.init_self_play()
 
         # Define action and observation space
         # They must be gym.spaces objects
@@ -36,14 +50,11 @@ class HungryGeeseEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.past_models = [None, None, None]
-        self.change_index = 0
-
-        # first model load
-        for _ in range(3):
-            self.change_model()
-
-        self.obs_prev = None
+    def init_self_play(self):
+        self.self_play = True
+        self.trainer = self.env.train(
+            [None, self.opponent, self.opponent, self.opponent]
+        )
 
     def change_model(self):
         path = self.save_path
@@ -57,16 +68,19 @@ class HungryGeeseEnv(gym.Env):
             print(e)
 
     def opponent(self, obs, conf):
-        model_index = obs.index
+        model_index = obs.index - 1
         obs_backup = obs
-        if self.past_models[model_index] is None:
-            action = random.randint(1, 4)
+        if random.random() < self.random_eps:
+            illegal_action = (self.last_actions[model_index] + 2) % 4 \
+                if self.last_actions[model_index] != -1 else -1
+            actions = [a for a in range(4) if a != illegal_action]
+            action = actions[random.randrange(len(actions))]
         else:
             obs = self.process_obs(obs)
             action, _ = self.past_models[model_index].predict(obs)
-            action += self.action_offset
-        # save previous obs
-        if model_index == len(self.past_models):
+        self.last_actions[model_index] = action
+        action += self.action_offset
+        if model_index == len(self.past_models) - 1:
             self.obs_prev = obs_backup
         return Action(action).name
 
@@ -106,8 +120,8 @@ class HungryGeeseEnv(gym.Env):
         '''
         reward:
             +1   if 1st
-            1/3  if 2nd
-            -1/3 if 3rd
+            -1/3 if 2nd
+            -2/3 if 3rd
             -1   if 4th
         '''
         if done:
@@ -124,6 +138,8 @@ class HungryGeeseEnv(gym.Env):
                             elif len(self.obs_prev.geese[i]) \
                                     == len(self.obs_prev.geese[0]):
                                 rank += 0.5
+                        else:
+                            rank += 0.5
             else:  # if I'm alive
                 rank = 1
                 for i, goose in enumerate(obs.geese[1:], 1):
@@ -131,7 +147,10 @@ class HungryGeeseEnv(gym.Env):
                         rank += 1
                     elif len(goose) == len(obs.geese[0]):
                         rank += 0.5
-            return (3 - 2 * (rank - 1)) / 3
+            if rank == 1:
+                return 1.
+            else:
+                return (1 - rank) / 3
         return 0.
 
     def step(self, action):
@@ -142,6 +161,7 @@ class HungryGeeseEnv(gym.Env):
         return obs, reward, done, info
 
     def reset(self):
+        self.obs_prev = None
         obs = self.trainer.reset()
         obs = self.process_obs(obs)
         return obs
