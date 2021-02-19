@@ -30,10 +30,12 @@ if args.load_path != '':
     print('Loading', file)
     model = PPO.load(file, env)
 else:
+    # policy_kwargs = dict(net_arch=[256, 128])
     model = PPO(MlpPolicy, env, verbose=0,
                 tensorboard_log='runs',
                 learning_rate=args.lr,
-                clip_range=0.2)
+                clip_range=0.2,
+                gamma=0.95)  # policy_kwargs=policy_kwargs)
 
 callback = CustomCallback(
     save_freq=10000, save_path=args.save_path, name_prefix='model',

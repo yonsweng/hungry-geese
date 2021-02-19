@@ -26,9 +26,8 @@ class HungryGeeseEnv(gym.Env):
         self.min_food = self.env.configuration.min_food
 
         self.obs_prev = None
+        self.act_prev = [None, None, None, None]
         self.past_models = [None, None, None]
-        self.last_actions = [-1, -1, -1]
-        self.random_eps = 0.1
         self.change_index = 0
 
         self.self_play = False
@@ -46,7 +45,7 @@ class HungryGeeseEnv(gym.Env):
         # They must be gym.spaces objects
         self.action_space = spaces.Discrete(len(self.actions))
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(18, self.rows, self.columns),
+            low=0, high=1, shape=(5 + 14 * self.rows * self.columns,),
             dtype=np.float32
         )
 
@@ -68,53 +67,54 @@ class HungryGeeseEnv(gym.Env):
             print(e)
 
     def opponent(self, obs, conf):
-        model_index = obs.index - 1
+        obs_index = obs.index
         obs_backup = obs
-        if random.random() < self.random_eps:
-            illegal_action = (self.last_actions[model_index] + 2) % 4 \
-                if self.last_actions[model_index] != -1 else -1
-            actions = [a for a in range(4) if a != illegal_action]
-            action = actions[random.randrange(len(actions))]
-        else:
-            obs = self.process_obs(obs)
-            action, _ = self.past_models[model_index].predict(obs)
-        self.last_actions[model_index] = action
+        obs = self.process_obs(obs)
+        action, _ = self.past_models[obs_index - 1].predict(obs)
         action += self.action_offset
-        if model_index == len(self.past_models) - 1:
+        act_oppo = (self.act_prev[obs_index] + 1) % 4 + 1 \
+            if self.act_prev[obs_index] is not None else 0
+        if action == act_oppo:
+            actions = [a for a in range(1, 5) if a != act_oppo]
+            action = actions[random.randrange(len(actions))]
+        self.act_prev[obs_index] = action
+        if obs_index == len(self.past_models):
             self.obs_prev = obs_backup
         return Action(action).name
 
     # Modified from https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
     def process_obs(self, obs):
-        b = np.zeros((18, 7 * 11), dtype=np.float32)
+        # my previous action
+        obs_index = obs.index
+        a = np.zeros(5, dtype=np.float32)
+        if self.act_prev[obs_index] is not None:
+            a[self.act_prev[obs_index] - 1] = 1
+        a[-1] = obs.step % 40 / 40
+
+        b = np.zeros((14, 7 * 11), dtype=np.float32)
         b[-1] = 1  # empty cells
 
         for p, pos_list in enumerate(obs['geese']):
             # head position
             for pos in pos_list[:1]:
-                b[0 + (p - obs['index']) % 4, pos] = 1
+                b[0 + (p - obs_index) % 4, pos] = 1
                 b[-1, pos] = 0
             # tip position
             for pos in pos_list[-1:]:
-                b[4 + (p - obs['index']) % 4, pos] = 1
+                b[4 + (p - obs_index) % 4, pos] = 1
                 b[-1, pos] = 0
             # whole position
             for pos in pos_list:
-                b[8 + (p - obs['index']) % 4, pos] = 1
+                b[8 + (p - obs_index) % 4, pos] = 1
                 b[-1, pos] = 0
-
-        # previous head position
-        if self.obs_prev is not None:
-            for p, pos_list in enumerate(self.obs_prev['geese']):
-                for pos in pos_list[:1]:
-                    b[12 + (p - obs['index']) % 4, pos] = 1
 
         # food
         for pos in obs['food']:
-            b[16, pos] = 1
+            b[-2, pos] = 1
             b[-1, pos] = 0
 
-        return b.reshape(-1, 7, 11)
+        c = np.concatenate((a, b.reshape(-1)))
+        return c
 
     def process_reward(self, obs, done):
         '''
@@ -155,6 +155,7 @@ class HungryGeeseEnv(gym.Env):
 
     def step(self, action):
         action += self.action_offset
+        self.act_prev[0] = action
         obs, reward, done, info = self.trainer.step(Action(action).name)
         reward = self.process_reward(obs, done)
         obs = self.process_obs(obs)
@@ -162,6 +163,7 @@ class HungryGeeseEnv(gym.Env):
 
     def reset(self):
         self.obs_prev = None
+        self.act_prev = [None, None, None, None]
         obs = self.trainer.reset()
         obs = self.process_obs(obs)
         return obs
