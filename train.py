@@ -14,6 +14,7 @@ parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
 parser.add_argument('--lr', default=1e-5, type=float)
+parser.add_argument('--ent_coef', default=0.1, type=float)
 args = parser.parse_args()
 
 env_kwargs = dict(
@@ -38,7 +39,8 @@ else:
                 learning_rate=args.lr,
                 clip_range=0.2,
                 gamma=0.99,
-                policy_kwargs=policy_kwargs)
+                policy_kwargs=policy_kwargs,
+                ent_coef=0.02)
 
 callback = CustomCallback(
     save_freq=10000, save_path=args.save_path, name_prefix='model',
