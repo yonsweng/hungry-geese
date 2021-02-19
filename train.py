@@ -11,8 +11,15 @@ parser.add_argument('--load_path', default='', type=str)
 parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
-parser.add_argument('--lr', default=1e-5, type=float)
+parser.add_argument('--lr', default=1e-6, type=float)
 args = parser.parse_args()
+
+env_kwargs = dict(
+    save_path=args.save_path,
+    self_play_start=args.self_play_start
+)
+env = make_vec_env(HungryGeeseEnv, n_envs=args.n_envs,
+                   env_kwargs=env_kwargs)
 
 if args.load_path != '':
     # import glob
@@ -20,14 +27,8 @@ if args.load_path != '':
     # file = max(list_of_files, key=os.path.getctime)
     file = args.load_path
     print('Loading', file)
-    model = PPO.load(file)
+    model = PPO.load(file, env)
 else:
-    env_kwargs = dict(
-        save_path=args.save_path,
-        self_play_start=args.self_play_start
-    )
-    env = make_vec_env(HungryGeeseEnv, n_envs=args.n_envs,
-                       env_kwargs=env_kwargs)
     model = PPO(CustomActorCriticPolicy, env, verbose=0,
                 tensorboard_log='runs',
                 learning_rate=args.lr,
