@@ -1,5 +1,6 @@
 # import os
 import argparse
+import torch.nn as nn
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.ppo.policies import MlpPolicy
@@ -12,7 +13,7 @@ parser.add_argument('--load_path', default='', type=str)
 parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
-parser.add_argument('--lr', default=3e-4, type=float)
+parser.add_argument('--lr', default=1e-5, type=float)
 args = parser.parse_args()
 
 env_kwargs = dict(
@@ -30,12 +31,14 @@ if args.load_path != '':
     print('Loading', file)
     model = PPO.load(file, env)
 else:
-    # policy_kwargs = dict(net_arch=[256, 128])
+    net_arch = [dict(pi=[512, 512, 512], vf=[512, 512, 512])]
+    policy_kwargs = dict(net_arch=net_arch, activation_fn=nn.ReLU)
     model = PPO(MlpPolicy, env, verbose=0,
                 tensorboard_log='runs',
                 learning_rate=args.lr,
                 clip_range=0.2,
-                gamma=0.95)  # policy_kwargs=policy_kwargs)
+                gamma=0.99,
+                policy_kwargs=policy_kwargs)
 
 callback = CustomCallback(
     save_freq=10000, save_path=args.save_path, name_prefix='model',

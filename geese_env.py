@@ -111,7 +111,7 @@ class HungryGeeseEnv(gym.Env):
         # food
         for pos in obs['food']:
             b[-2, pos] = 1
-            b[-1, pos] = 0
+            # b[-1, pos] = 0
 
         c = np.concatenate((a, b.reshape(-1)))
         return c
