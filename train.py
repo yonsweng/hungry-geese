@@ -1,6 +1,7 @@
 # import os
 import argparse
 import torch.nn as nn
+from torch.optim import Adam, RMSprop, SGD
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.ppo.policies import MlpPolicy
@@ -14,7 +15,10 @@ parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
 parser.add_argument('--lr', default=1e-5, type=float)
-parser.add_argument('--ent_coef', default=0.1, type=float)
+parser.add_argument('--optim', default='rmsprop', type=str)
+parser.add_argument('--ent_coef', default=0.02, type=float)
+parser.add_argument('--vf_coef', default=0.2, type=float)
+parser.add_argument('--hidden_units', default=512, type=int)
 args = parser.parse_args()
 
 env_kwargs = dict(
@@ -32,15 +36,30 @@ if args.load_path != '':
     print('Loading', file)
     model = PPO.load(file, env)
 else:
-    net_arch = [dict(pi=[512, 512, 512], vf=[512, 512, 512])]
-    policy_kwargs = dict(net_arch=net_arch, activation_fn=nn.ReLU)
+    h = args.hidden_units
+    net_arch = [h, h, dict(pi=[h, h], vf=[h, h])]
+    if args.optim.lower() == 'sgd':
+        optimizer_class = SGD
+        optimizer_kwargs = dict(momentum=0.9)
+    elif args.optim.lower() == 'rmsprop':
+        optimizer_class = RMSprop
+        optimizer_kwargs = dict()
+    else:
+        optimizer_class = Adam
+        optimizer_kwargs = dict()
+    policy_kwargs = dict(net_arch=net_arch,
+                         activation_fn=nn.ReLU,
+                         optimizer_class=optimizer_class,
+                         optimizer_kwargs=optimizer_kwargs)
+
     model = PPO(MlpPolicy, env, verbose=0,
                 tensorboard_log='runs',
                 learning_rate=args.lr,
                 clip_range=0.2,
                 gamma=0.99,
                 policy_kwargs=policy_kwargs,
-                ent_coef=0.02)
+                ent_coef=args.ent_coef,
+                vf_coef=args.vf_coef)
 
 callback = CustomCallback(
     save_freq=10000, save_path=args.save_path, name_prefix='model',
