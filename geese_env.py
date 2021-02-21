@@ -66,8 +66,9 @@ class HungryGeeseEnv(gym.Env):
         try:
             files = [join(path, f)
                      for f in listdir(path) if isfile(join(path, f))]
-            files = sorted(files, key=getmtime, reverse=True)
-            model_name = files[random.randrange(min(len(files), 5))]
+            # files = sorted(files, key=getmtime, reverse=True)
+            # model_name = files[random.randrange(min(len(files), 5))]
+            model_name = max(files, key=getmtime)
             self.past_models[self.change_index] = PPO.load(model_name)
             self.change_index = (self.change_index + 1) % len(self.past_models)
         except Exception as e:

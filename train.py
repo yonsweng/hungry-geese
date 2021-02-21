@@ -13,13 +13,14 @@ parser.add_argument('--load_path', default='', type=str)
 parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
-parser.add_argument('--lr', default=2e-5, type=float)
-parser.add_argument('--optim', default='adam', type=str)
-parser.add_argument('--ent_coef', default=0.05, type=float)
+parser.add_argument('--lr', default=1e-5, type=float)
+parser.add_argument('--optim', default='rmsprop', type=str)
+parser.add_argument('--ent_coef', default=0.01, type=float)
 parser.add_argument('--vf_coef', default=0.5, type=float)
 parser.add_argument('--hidden_units', default=512, type=int)
 parser.add_argument('--gamma', default=0.95, type=float)
 args = parser.parse_args()
+print(args)
 
 kernel_size = (3, 3)
 env_kwargs = dict(
@@ -33,7 +34,7 @@ env = make_vec_env(HungryGeeseEnv, n_envs=args.n_envs,
 if args.load_path != '':
     model = PPO.load(args.load_path, env)
 else:
-    if args.optim.lower() == 'rmsprop':
+    if args.optim.lower() == 'rmsprop' or args.optim.lower() == 'rms':
         optimizer_class = RMSprop
         optimizer_kwargs = None
     else:
@@ -63,8 +64,8 @@ else:
 
 # save_freq should be divided by n_envs
 callback = CustomCallback(
-    save_freq=10000, save_path=args.save_path, name_prefix='model',
-    self_play_start=args.self_play_start
+    save_freq=50000, save_path=args.save_path, name_prefix='model',
+    self_play_start=args.self_play_start, verbose=1
 )
 
-model.learn(10000000, callback=callback, reset_num_timesteps=True)
+model.learn(10000000, callback=callback)
