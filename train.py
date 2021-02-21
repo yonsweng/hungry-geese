@@ -5,7 +5,7 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.ppo.policies import MlpPolicy
 from geese_env import HungryGeeseEnv
-from model import Extractor
+from model import FeaturesExtractor
 from callback import CustomCallback
 
 parser = argparse.ArgumentParser(description='Stable-Baselines3 PPO')
@@ -44,7 +44,7 @@ else:
 
     policy_kwargs = dict(
         net_arch=net_arch,
-        features_extractor_class=Extractor,
+        features_extractor_class=FeaturesExtractor,
         features_extractor_kwargs=dict(kernel_size=kernel_size),
         activation_fn=nn.ReLU,
         optimizer_class=optimizer_class,
