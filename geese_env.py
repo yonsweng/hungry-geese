@@ -73,19 +73,6 @@ class HungryGeeseEnv(gym.Env):
         except Exception as e:
             print(e)
 
-    def opponent(self, obs, conf):
-        obs_index = obs.index
-        obs = self.process_obs(obs)
-        action, _ = self.past_models[obs_index - 1].predict(obs)
-        action += self.action_offset
-        act_oppo = (self.act_prev[obs_index] + 1) % 4 + 1 \
-            if self.act_prev[obs_index] is not None else 0
-        if action == act_oppo:
-            actions = [a for a in range(1, 5) if a != act_oppo]
-            action = actions[random.randrange(len(actions))]
-        self.act_prev[obs_index] = action
-        return Action(action).name
-
     # Modified from
     # https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
     def process_obs(self, obs):
@@ -159,6 +146,27 @@ class HungryGeeseEnv(gym.Env):
                 return (1 - rank) / 3
         return 0.
 
+    def reset(self):
+        self.act_prev = [None, None, None, None]
+        obs = self.trainer.reset()
+        self.obs_prev = None
+        self.obs_backup = obs
+        obs = self.process_obs(obs)
+        return obs
+
+    def opponent(self, obs, conf):
+        obs_index = obs.index
+        obs = self.process_obs(obs)
+        action, _ = self.past_models[obs_index - 1].predict(obs)
+        action += self.action_offset
+        act_oppo = (self.act_prev[obs_index] + 1) % 4 + 1 \
+            if self.act_prev[obs_index] is not None else 0
+        if action == act_oppo:
+            actions = [a for a in range(1, 5) if a != act_oppo]
+            action = actions[random.randrange(len(actions))]
+        self.act_prev[obs_index] = action
+        return Action(action).name
+
     def step(self, action):
         action += self.action_offset
         self.act_prev[0] = action
@@ -168,14 +176,6 @@ class HungryGeeseEnv(gym.Env):
         reward = self.process_reward(obs, done)
         obs = self.process_obs(obs)
         return obs, reward, done, info
-
-    def reset(self):
-        self.act_prev = [None, None, None, None]
-        obs = self.trainer.reset()
-        self.obs_prev = None
-        self.obs_backup = obs
-        obs = self.process_obs(obs)
-        return obs
 
     def render(self, **kwargs):
         self.env.render(**kwargs)
