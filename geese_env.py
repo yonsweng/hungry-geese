@@ -12,7 +12,7 @@ from kaggle_environments.envs.hungry_geese.hungry_geese import Action
 
 
 class HungryGeeseEnv(gym.Env):
-    def __init__(self, save_path, self_play_start, debug=False):
+    def __init__(self, save_path, self_play_start, kernel_size, debug=False):
         super(HungryGeeseEnv, self).__init__()
 
         self.save_path = save_path
@@ -20,8 +20,10 @@ class HungryGeeseEnv(gym.Env):
         self.actions = [action for action in Action]
         self.action_offset = 1
         self.env = make("hungry_geese", debug=self.debug)
+        self.channels = 11
         self.rows = self.env.configuration.rows
         self.columns = self.env.configuration.columns
+        self.edge_size = (kernel_size[0] // 2, kernel_size[1] // 2)
         self.hunger_rate = self.env.configuration.hunger_rate
         self.min_food = self.env.configuration.min_food
 
@@ -45,8 +47,10 @@ class HungryGeeseEnv(gym.Env):
         # They must be gym.spaces objects
         self.action_space = spaces.Discrete(len(self.actions))
         self.observation_space = spaces.Box(
-            low=0, high=1, shape=(5 + 14 * self.rows * self.columns,),
-            dtype=np.float32
+            low=0, high=255, dtype=np.uint8,
+            shape=(self.rows + self.edge_size[0] * 2,
+                   self.columns + self.edge_size[1] * 2,
+                   self.channels)
         )
 
     def init_self_play(self):
@@ -60,7 +64,7 @@ class HungryGeeseEnv(gym.Env):
         try:
             files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
             files = sorted(files, key=getctime, reverse=True)
-            model_name = files[random.randrange(min(len(files), 10))]
+            model_name = files[random.randrange(min(len(files), 5))]
             self.past_models[self.change_index] = PPO.load(model_name)
             self.change_index = (self.change_index + 1) % len(self.past_models)
         except Exception as e:
@@ -84,37 +88,38 @@ class HungryGeeseEnv(gym.Env):
 
     # Modified from https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
     def process_obs(self, obs):
-        # my previous action
         obs_index = obs.index
-        a = np.zeros(5, dtype=np.float32)
-        if self.act_prev[obs_index] is not None:
-            a[self.act_prev[obs_index] - 1] = 1
-        a[-1] = obs.step % 40 / 40
 
-        b = np.zeros((14, 7 * 11), dtype=np.float32)
-        b[-1] = 1  # empty cells
+        b = np.zeros((self.rows * self.columns, self.channels), dtype=np.uint8)
+        b[:, -1] = 255  # empty cells
 
-        for p, pos_list in enumerate(obs['geese']):
+        for p, pos_list in enumerate(obs.geese):
             # head position
             for pos in pos_list[:1]:
-                b[0 + (p - obs_index) % 4, pos] = 1
-                b[-1, pos] = 0
-            # tip position
-            for pos in pos_list[-1:]:
-                b[4 + (p - obs_index) % 4, pos] = 1
-                b[-1, pos] = 0
+                b[pos, 0 + (p - obs_index) % 4] = 255
+                b[pos, -1] = 0
             # whole position
             for pos in pos_list:
-                b[8 + (p - obs_index) % 4, pos] = 1
-                b[-1, pos] = 0
+                b[pos, 4 + (p - obs_index) % 4] = 255
+                b[pos, -1] = 0
 
-        # food
-        for pos in obs['food']:
-            b[-2, pos] = 1
-            # b[-1, pos] = 0
+        # previous head position
+        if self.obs_prev is not None:
+            for pos in self.obs_prev.geese[obs_index][:1]:
+                b[pos, -3] = 255
 
-        c = np.concatenate((a, b.reshape(-1)))
-        return c
+        for pos in obs.food:
+            b[pos, -2] = 255
+
+        b = b.reshape(self.rows, self.columns, -1)
+
+        b = np.concatenate([b[:, -self.edge_size[1]:],
+                            b,
+                            b[:, :self.edge_size[1]]], axis=1)
+        b = np.concatenate([b[-self.edge_size[0]:, :],
+                            b,
+                            b[:self.edge_size[0], :]], axis=0)
+        return b
 
     def process_reward(self, obs, done):
         '''
