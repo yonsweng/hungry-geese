@@ -1,7 +1,7 @@
 # Initial template from: https://stable-baselines.readthedocs.io/en/master/guide/custom_env.html
 # Modified from https://www.kaggle.com/victordelafuente/dqn-goose-with-stable-baselines-wip
 from os import listdir
-from os.path import isfile, join, getctime
+from os.path import isfile, join, getmtime
 import random
 import numpy as np
 import gym
@@ -28,6 +28,7 @@ class HungryGeeseEnv(gym.Env):
         self.min_food = self.env.configuration.min_food
 
         self.obs_prev = None
+        self.obs_backup = None
         self.act_prev = [None, None, None, None]
         self.past_models = [None, None, None]
         self.change_index = 0
@@ -39,7 +40,6 @@ class HungryGeeseEnv(gym.Env):
             'examples/mighty_boiler_goose.py',
             'examples/risk_averse.py'
         ])
-
         if self_play_start == 0:
             self.init_self_play()
 
@@ -63,7 +63,7 @@ class HungryGeeseEnv(gym.Env):
         path = self.save_path
         try:
             files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
-            files = sorted(files, key=getctime, reverse=True)
+            files = sorted(files, key=getmtime, reverse=True)
             model_name = files[random.randrange(min(len(files), 5))]
             self.past_models[self.change_index] = PPO.load(model_name)
             self.change_index = (self.change_index + 1) % len(self.past_models)
@@ -72,7 +72,6 @@ class HungryGeeseEnv(gym.Env):
 
     def opponent(self, obs, conf):
         obs_index = obs.index
-        obs_backup = obs
         obs = self.process_obs(obs)
         action, _ = self.past_models[obs_index - 1].predict(obs)
         action += self.action_offset
@@ -82,8 +81,6 @@ class HungryGeeseEnv(gym.Env):
             actions = [a for a in range(1, 5) if a != act_oppo]
             action = actions[random.randrange(len(actions))]
         self.act_prev[obs_index] = action
-        if obs_index == len(self.past_models):
-            self.obs_prev = obs_backup
         return Action(action).name
 
     # Modified from https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
@@ -162,14 +159,17 @@ class HungryGeeseEnv(gym.Env):
         action += self.action_offset
         self.act_prev[0] = action
         obs, reward, done, info = self.trainer.step(Action(action).name)
+        self.obs_prev = self.obs_backup
+        self.obs_backup = obs
         reward = self.process_reward(obs, done)
         obs = self.process_obs(obs)
         return obs, reward, done, info
 
     def reset(self):
-        self.obs_prev = None
         self.act_prev = [None, None, None, None]
         obs = self.trainer.reset()
+        self.obs_prev = None
+        self.obs_backup = obs
         obs = self.process_obs(obs)
         return obs
 

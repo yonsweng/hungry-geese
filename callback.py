@@ -77,6 +77,8 @@ class CustomCallback(BaseCallback):
         if self.num_timesteps == self.self_play_start:
             for env in self.training_env.envs:
                 env.init_self_play()
+                for _ in range(len(env.past_models)):
+                    env.change_model()
 
         return True
 
