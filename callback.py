@@ -41,7 +41,8 @@ class CustomCallback(BaseCallback):
         if self.save_path is not None:
             os.makedirs(self.save_path, exist_ok=True)
         # first model load
-        path = os.path.join(self.save_path, f"{self.name_prefix}_{self.num_timesteps}_steps")
+        path = os.path.join(self.save_path,
+                            f"{self.name_prefix}_{self.num_timesteps}_steps")
         self.model.save(path)
         for env in self.training_env.envs:
             if env.self_play:
@@ -58,15 +59,18 @@ class CustomCallback(BaseCallback):
 
     def _on_step(self) -> bool:
         """
-        This method will be called by the model after each call to `env.step()`.
+        This method will be called by the model after each call to `env.step()`
 
         For child callback (of an `EventCallback`), this will be called
         when the event is triggered.
 
-        :return: (bool) If the callback returns False, training is aborted early.
+        :return: (bool) If the callback returns False, training is aborted.
         """
         if self.num_timesteps % self.save_freq == 0:
-            path = os.path.join(self.save_path, f"{self.name_prefix}_{self.num_timesteps}_steps")
+            path = os.path.join(
+                self.save_path,
+                f"{self.name_prefix}_{self.num_timesteps}_steps"
+            )
             self.model.save(path)
             if self.verbose > 1:
                 print(f"Saving model checkpoint to {path}")

@@ -1,5 +1,7 @@
-# Initial template from: https://stable-baselines.readthedocs.io/en/master/guide/custom_env.html
-# Modified from https://www.kaggle.com/victordelafuente/dqn-goose-with-stable-baselines-wip
+# Initial template from
+# https://stable-baselines.readthedocs.io/en/master/guide/custom_env.html
+# Modified from
+# https://www.kaggle.com/victordelafuente/dqn-goose-with-stable-baselines-wip
 from os import listdir
 from os.path import isfile, join, getmtime
 import random
@@ -62,7 +64,8 @@ class HungryGeeseEnv(gym.Env):
     def change_model(self):
         path = self.save_path
         try:
-            files = [join(path, f) for f in listdir(path) if isfile(join(path, f))]
+            files = [join(path, f)
+                     for f in listdir(path) if isfile(join(path, f))]
             files = sorted(files, key=getmtime, reverse=True)
             model_name = files[random.randrange(min(len(files), 5))]
             self.past_models[self.change_index] = PPO.load(model_name)
@@ -83,7 +86,8 @@ class HungryGeeseEnv(gym.Env):
         self.act_prev[obs_index] = action
         return Action(action).name
 
-    # Modified from https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
+    # Modified from
+    # https://www.kaggle.com/yuricat/smart-geese-trained-by-reinforcement-learning
     def process_obs(self, obs):
         obs_index = obs.index
 
