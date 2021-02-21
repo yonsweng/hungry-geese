@@ -18,6 +18,7 @@ parser.add_argument('--optim', default='adam', type=str)
 parser.add_argument('--ent_coef', default=0.05, type=float)
 parser.add_argument('--vf_coef', default=0.5, type=float)
 parser.add_argument('--hidden_units', default=512, type=int)
+parser.add_argument('--gamma', default=0.95, type=float)
 args = parser.parse_args()
 
 kernel_size = (3, 3)
@@ -55,7 +56,7 @@ else:
                 tensorboard_log='runs',
                 learning_rate=args.lr,
                 clip_range=0.2,
-                gamma=0.99,
+                gamma=args.gamma,
                 policy_kwargs=policy_kwargs,
                 ent_coef=args.ent_coef,
                 vf_coef=args.vf_coef)
