@@ -38,9 +38,9 @@ class HungryGeeseEnv(gym.Env):
         self.self_play = False
         self.trainer = self.env.train([
             None,
-            'examples/simple_bfs.py',
             'examples/mighty_boiler_goose.py',
-            'examples/risk_averse.py'
+            'examples/mighty_boiler_goose.py',
+            'examples/mighty_boiler_goose.py'
         ])
         if self_play_start == 0:
             self.init_self_play()
