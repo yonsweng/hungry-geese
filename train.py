@@ -13,20 +13,17 @@ parser.add_argument('--load_path', default='', type=str)
 parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
-parser.add_argument('--lr', default=1e-5, type=float)
+parser.add_argument('--lr', default=1e-4, type=float)
 parser.add_argument('--optim', default='rmsprop', type=str)
 parser.add_argument('--ent_coef', default=0.01, type=float)
 parser.add_argument('--vf_coef', default=0.5, type=float)
-parser.add_argument('--hidden_units', default=512, type=int)
-parser.add_argument('--gamma', default=0.95, type=float)
+parser.add_argument('--gamma', default=0.9, type=float)
 args = parser.parse_args()
 print(args)
 
-kernel_size = (3, 3)
 env_kwargs = dict(
     save_path=args.save_path,
-    self_play_start=args.self_play_start,
-    kernel_size=kernel_size
+    self_play_start=args.self_play_start
 )
 env = make_vec_env(HungryGeeseEnv, n_envs=args.n_envs,
                    env_kwargs=env_kwargs)
@@ -41,13 +38,12 @@ else:
         optimizer_class = Adam
         optimizer_kwargs = None
 
-    h = args.hidden_units
-    net_arch = [h, dict(pi=[h], vf=[h])]
+    net_arch = [512, 256, dict(pi=[128, 64], vf=[128, 64])]
 
     policy_kwargs = dict(
         net_arch=net_arch,
         features_extractor_class=FeaturesExtractor,
-        features_extractor_kwargs=dict(kernel_size=kernel_size),
+        features_extractor_kwargs=None,
         activation_fn=nn.ReLU,
         optimizer_class=optimizer_class,
         optimizer_kwargs=optimizer_kwargs

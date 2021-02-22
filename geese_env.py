@@ -14,7 +14,7 @@ from kaggle_environments.envs.hungry_geese.hungry_geese import Action
 
 
 class HungryGeeseEnv(gym.Env):
-    def __init__(self, save_path, self_play_start, kernel_size, debug=False):
+    def __init__(self, save_path, self_play_start, debug=False):
         super(HungryGeeseEnv, self).__init__()
 
         self.save_path = save_path
@@ -25,7 +25,7 @@ class HungryGeeseEnv(gym.Env):
         self.channels = 11
         self.rows = self.env.configuration.rows
         self.columns = self.env.configuration.columns
-        self.edge_size = (kernel_size[0] // 2, kernel_size[1] // 2)
+        self.edge_size = (2, 2)
         self.hunger_rate = self.env.configuration.hunger_rate
         self.min_food = self.env.configuration.min_food
 
@@ -114,9 +114,9 @@ class HungryGeeseEnv(gym.Env):
         '''
         reward:
             +1   if 1st
-            -1/3 if 2nd
-            -2/3 if 3rd
-            -1   if 4th
+            -1   if losing
+            +0.1 if eating food
+            -0.1 if shorter than or equal to another
         '''
         if done:
             if len(obs.geese[0]) == 0:  # if I'm dead
@@ -144,8 +144,20 @@ class HungryGeeseEnv(gym.Env):
             if rank == 1:
                 return 1.
             else:
-                return (1 - rank) / 3
-        return 0.
+                return -1.
+                # return (1 - rank) / 3
+        else:
+            has_eaten = True if self.obs_prev is not None and \
+                        len(obs.geese[0]) > len(self.obs_prev.geese[0]) \
+                        else False
+
+            # is_shorter = False
+            # for goose in obs.geese[1:]:
+            #     if len(goose) >= len(obs.geese[0]):
+            #         is_shorter = True
+            #         break
+
+            return 0.1 * int(has_eaten)  # - 0.1 * int(is_shorter)
 
     def reset(self):
         self.act_prev = [None, None, None, None]
