@@ -15,9 +15,11 @@ parser.add_argument('--n_envs', default=4, type=int)
 parser.add_argument('--self_play_start', default=0, type=int)
 parser.add_argument('--lr', default=1e-4, type=float)
 parser.add_argument('--optim', default='rmsprop', type=str)
+parser.add_argument('--weight_decay', default=1e-2, type=float)
 parser.add_argument('--ent_coef', default=0.01, type=float)
 parser.add_argument('--vf_coef', default=0.5, type=float)
 parser.add_argument('--gamma', default=0.9, type=float)
+parser.add_argument('--n_steps', default=128, type=int)
 args = parser.parse_args()
 print(args)
 
@@ -33,7 +35,7 @@ if args.load_path != '':
 else:
     if args.optim.lower() == 'rmsprop' or args.optim.lower() == 'rms':
         optimizer_class = RMSprop
-        optimizer_kwargs = None
+        optimizer_kwargs = dict(alpha=0.9, weight_decay=args.weight_decay)
     else:
         optimizer_class = Adam
         optimizer_kwargs = None
@@ -56,7 +58,8 @@ else:
                 gamma=args.gamma,
                 policy_kwargs=policy_kwargs,
                 ent_coef=args.ent_coef,
-                vf_coef=args.vf_coef)
+                vf_coef=args.vf_coef,
+                n_steps=args.n_steps)
 
 # save_freq should be divided by n_envs
 callback = CustomCallback(
