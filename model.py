@@ -10,12 +10,9 @@ class FeaturesExtractor(BaseFeaturesExtractor):
         self.conv1 = nn.Conv2d(n_channels, 32, (3, 3))
         self.conv2 = nn.Conv2d(32, 64, (3, 3))
         self.flatten = nn.Flatten(start_dim=1)
-        self.dropout = nn.Dropout()
 
     def forward(self, x):
         x = F.relu(self.conv1(x))
-        x = self.dropout(x)
         x = F.relu(self.conv2(x))
-        x = self.dropout(x)
         x = self.flatten(x)
         return x

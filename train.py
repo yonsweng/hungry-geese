@@ -7,19 +7,23 @@ from stable_baselines3.ppo.policies import MlpPolicy
 from geese_env import HungryGeeseEnv
 from model import FeaturesExtractor
 from callback import CustomCallback
+# from scheduler import ExponentialWarmUpSceduler
 
 parser = argparse.ArgumentParser(description='Stable-Baselines3 PPO')
 parser.add_argument('--load_path', default='', type=str)
 parser.add_argument('--save_path', default='models0', type=str)
 parser.add_argument('--n_envs', default=4, type=int)
-parser.add_argument('--self_play_start', default=0, type=int)
+parser.add_argument('--self_play_start', default=2000000, type=int)
+# parser.add_argument('--init_lr', default=1e-6, type=float)
 parser.add_argument('--lr', default=1e-4, type=float)
+parser.add_argument('--schedule_steps', default=500000, type=int)
 parser.add_argument('--optim', default='rmsprop', type=str)
-parser.add_argument('--weight_decay', default=1e-2, type=float)
+parser.add_argument('--alpha', default=0.99, type=float)
+parser.add_argument('--weight_decay', default=0, type=float)
 parser.add_argument('--ent_coef', default=0.01, type=float)
 parser.add_argument('--vf_coef', default=0.5, type=float)
 parser.add_argument('--gamma', default=0.9, type=float)
-parser.add_argument('--n_steps', default=128, type=int)
+parser.add_argument('--n_steps', default=2048, type=int)
 args = parser.parse_args()
 print(args)
 
@@ -35,10 +39,15 @@ if args.load_path != '':
 else:
     if args.optim.lower() == 'rmsprop' or args.optim.lower() == 'rms':
         optimizer_class = RMSprop
-        optimizer_kwargs = dict(alpha=0.9, weight_decay=args.weight_decay)
+        optimizer_kwargs = dict(
+            alpha=args.alpha,
+            weight_decay=args.weight_decay
+        )
     else:
         optimizer_class = Adam
-        optimizer_kwargs = None
+        optimizer_kwargs = dict(
+            weight_decay=args.weight_decay
+        )
 
     net_arch = [512, 256, dict(pi=[128, 64], vf=[128, 64])]
 
@@ -49,6 +58,7 @@ else:
         activation_fn=nn.ReLU,
         optimizer_class=optimizer_class,
         optimizer_kwargs=optimizer_kwargs
+        # lr_schedule=ExponentialWarmUpSceduler(args.init_lr, args.lr, args.schedule_steps)
     )
 
     model = PPO(MlpPolicy, env, verbose=0,
