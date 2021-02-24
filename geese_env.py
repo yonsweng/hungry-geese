@@ -141,7 +141,7 @@ class HungryGeeseEnv(gym.Env):
                         rank += 1
                     elif len(goose) == len(obs.geese[0]):
                         rank += 0.5
-            if rank == 1:
+            if rank < 2:
                 return 1.
             else:
                 return -1.
@@ -158,6 +158,7 @@ class HungryGeeseEnv(gym.Env):
             #         break
 
             return 0.1 * int(has_eaten)  # - 0.1 * int(is_shorter)
+            # return 0.
 
     def reset(self):
         self.act_prev = [None, None, None, None]
